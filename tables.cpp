@@ -14,8 +14,10 @@ public:
     int offset;
     vector<string> args_types;
     bool is_func;
+    string loc;
+
     Entry(){}
-    Entry(string _name,string _type,int _offset) : name(_name), type(_type), offset(_offset), args_types(vector<string>()),  is_func(false){} //for varible
+    Entry(string _name,string _type,int _offset) : name(_name), type(_type), offset(_offset), args_types(vector<string>()),  is_func(false), loc(""){} //for varible
 
     Entry(string _name,string _type, vector<string> args): name(_name), type(_type), offset(0), args_types(args), is_func(true){} //for func
     Entry& operator=(const Entry& e){

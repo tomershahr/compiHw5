@@ -15,19 +15,22 @@ using namespace std;
 
 //--------------------------------classes--------------------------//
 class Node{
+public:
+    string reg;
+    Node():reg(""){};
 };
 
 class Num : public Node{
 public:
     int value;
-    Num(string val): value(stoi(val)){}
+    Num(string val): Node(), value(stoi(val)){}
 
 };
 
-class NumB : public Num{
+class BinOp : public Num{
 public:
-    NumB(string& val): Num(val){}
-    //NumB(Num& n): Num(n->){}
+    string op;
+    BinOp(string& val):Node(), BinOp(val){}
 };
 
 

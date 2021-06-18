@@ -60,8 +60,8 @@ default						return DEFAULT;
 {assign}                    return ASSIGN;
 {relational}                return RELATION_RELOP;
 {equality}                  return EQUALITY_RELOP;
-[\*\/]						return MULT_DIV;
-[\+-]                       return PLUS_MINUS;
+[\*\/]						{yylval = new BinOp(string(yytext)); return MULT_DIV ;}
+[\+-]                       {yylval = new BinOp(string(yytext)); return PLUS_MINUS;}
 {id}                        {yylval = new Id(string(yytext));return ID;}
 {num}                       {yylval = new Num(string(yytext));return NUM;}
 {string}                    {yylval = new Type(string("STRING"));return STRING;}

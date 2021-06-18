@@ -48,8 +48,8 @@
 %left MULT_DIV
 %right NOT
 %left LBRACE RBRACE
-%left LPAREN RPAREN
-%right IF
+%left t IF
+      %righLPAREN RPAREN
 %right ELSE
 
 

@@ -1,0 +1,248 @@
+%{
+    #include "Nodes.cpp"
+	#include <iostream>
+	#include "hw3_output.hpp"
+	#include "tables.cpp"
+	#include "bp.hpp"
+	#include "utils.hpp"
+	using namespace output;
+	using namespace std;
+
+
+
+	extern int yylineno;
+	extern int yylex();
+	extern char* yytext;
+	void yyerror(const char*);
+	bool compareTypes(Node* token, string type);
+	bool isNumber(Node* token);
+	SymbolTables symbols_tables;
+	string ret_type; //curr function ret type
+
+	CodeBuffer& buff =CodeBuffer::instance();
+	Info& info = Info::instance();
+	void checkdiv(string reg);
+	void init();
+	void truncation(Node* node);
+
+
+
+%}
+
+%nonassoc VOID
+%nonassoc INT
+%nonassoc BYTE
+%nonassoc B
+%nonassoc BOOL
+%nonassoc TRUE
+%nonassoc FALSE
+%nonassoc RETURN
+%nonassoc WHILE
+%nonassoc BREAK
+%nonassoc CONTINUE
+%nonassoc SWITCH
+%nonassoc CASE
+%nonassoc DEFAULT
+%nonassoc COLON
+%nonassoc SC
+%nonassoc COMMA
+%nonassoc ID
+%nonassoc NUM
+%nonassoc STRING
+%right ASSIGN
+%left OR
+%left AND
+%left EQUALITY_RELOP
+%nonassoc RELATION_RELOP
+%left PLUS_MINUS
+%left MULT_DIV
+%right NOT
+%left LBRACE RBRACE
+%left t IF
+      %righLPAREN RPAREN
+%right ELSE
+
+
+%%
+Program : {init();} Exp {
+
+/*
+ExpList : Exp {$$ = new ExpList($1);delete $1;}
+		| Exp COMMA ExpList {	ExpList* list1 =new ExpList($1);
+								$$ = list1->merge($3);
+								delete $1; delete $3;
+								};
+
+Type : INT {$$ = $1;}
+	 | BYTE {$$ = $1;}
+	 | BOOL {$$ = $1;};
+	 */
+
+Exp :  Exp MULT_DIV Exp {
+
+	    if(!isNumber($1) || !isNumber($3))
+    	        {errorMismatch(yylineno);exit(0);}
+    	if(compareTypes($1,"INT")|| compareTypes($3,"INT"))
+    	    {$$ = new Type("INT");}
+    	else{$$ = new Type("BYTE");}
+
+
+        string op = ((BinOp*)$2)->op == "*"? "mult" : "div";
+        string reg = info.newReg();
+
+        bool is_byte = compareTypes($$, "BYTE");
+        if(op == "div"){
+            checkdiv($$3->reg);
+            op =  is_byte ? "u" + op : "s" + op;
+        }
+        buff.emit(reg + "= " + op + "i32 "+ $1->reg +", " +$3->reg);
+        $$->reg = reg;
+        if(is_byte){
+            truncation($$);
+        }
+    	delete $1;
+    	delete $3;
+
+    }
+
+	| Exp PLUS_MINUS Exp {
+	        if(!isNumber($1) || !isNumber($3))
+        	        {errorMismatch(yylineno);exit(0);}
+        	if(compareTypes($1,"INT")|| compareTypes($3,"INT"))
+        	    {$$ = new Type("INT");}
+        	else{$$ = new Type("BYTE");
+        	}
+
+            string op = ((BinOp*)$2)->op == "+" ? "add" : "sub";
+        	string reg = info.newReg();
+        	$$->reg = reg;
+        	buff.emit(reg + "= " + op + "i32 "+ $1->reg +", " +$3->reg);
+        	if(compareTypes($$,"BYTE")){
+        	    truncation($$);
+        	}
+	}
+
+
+	| ID {
+	    string name = ((Id*)$1)->name;
+	    Entry entry;
+		bool is_symbol =symbols_tables.findSymbol(name, &entry);
+	    if(!is_symbol || (entry.is_func))
+            {errorUndef(yylineno, name); exit(0);}
+		$$ = new Type(entry.type);
+		string reg = info.newReg();
+		$$->reg = reg;
+        buff.emit(reg+ "= load i32, i32* "+ entry.loc);
+         ///todo: boolean
+
+
+        }
+
+
+
+
+	| NUM { $$ = new Type("INT");
+	        string reg = info.newReg();
+	        string val = ((Num*)$1)->value;
+	        $$->reg = reg;
+	        buff.emit(reg +" = add i32 0, i32 " +to_string(val) );
+
+	}
+
+	| NUM B {
+		int val =((Num*)$1)->value;
+		string str = to_string(val);
+	    if( val> 255)
+	        {errorByteTooLarge(yylineno, str );exit(0);}
+
+	    $$ =$2;
+	    string reg = info.newReg();
+        $$->reg = reg;
+        buff.emit(reg +" = add i32 0, i32 " +to_string(str) );
+
+	}
+
+
+
+
+    };
+
+%%
+
+void init(){
+
+     //lib funcs
+     buff.emit("declare i32 @printf(i8*, ...)");
+     buff.emit("declare void @exit(i32)");
+
+    //print
+    buffer.emitGlobal("@.str_specifier = constant [4 x i8] c\"%s\\0A\\00\"");
+    buffer.emit("define void @print(i8*) {");
+    buffer.emit("   call i32 (i8*, ...) @printf(i8* getelementptr ([4 x i8], [4 x i8]* @.str_specifier, i32 0, i32 0), i8* %0)");
+    buffer.emit("   ret void");
+    buffer.emit("}");
+
+
+    //printi
+    buffer.emitGlobal("@.int_specifier = constant [4 x i8] c\"%d\\0A\\00\"");
+    buffer.emit("define void @printi(i32) {");
+    buffer.emit("   call i32 (i8*, ...) @printf(i8* getelementptr ([4 x i8], [4 x i8]* @.int_specifier, i32 0, i32 0), i32 %0)");
+    buffer.emit("   ret void");
+    buffer.emit("}");
+
+    //errors
+    buff.emitGlobal("@.div_err = const [23 x i8] c\"Error division by zero\\00\"");
+
+
+
+}
+void truncation(Node* node){
+    string result = info.newReg();
+    buff.emit(result + "= and i32 255, i32 "+reg);
+    node->reg = result;
+}
+
+void checkdiv(string reg){ //todo: check if needed backpatch
+
+    string cond = info.newReg();
+    string lbl_t = info.newLabel();
+    string lbl_f = info.newLabel();
+    buff.emit(cond + "= icomp eq i32 0, "+ reg)
+    buff.emit("br i1 "+ cond+ ", label %" +lbl_t + ", label %" +lbl_f);
+    buff.emit(lbl_t + ":") // divide by zero
+    buff.emit("call void @print(i8* getelementptr( [23 x i*], [23 x i8]* @.zero_err, i32 0, i32 0))")
+    buff.emit("call void @exit(i32 0)");
+    buff.emit(lbl_f + ":");
+
+}
+
+
+
+bool compareTypes(Node* token, string type){
+    string node_type = ((Type*)token)->type;
+    return (node_type == type);
+}
+
+bool isNumber(Node* token){
+    if(compareTypes(token,"INT") || compareTypes(token,"BYTE")) return true;
+    return false;
+}
+
+
+void yyerror(const char*){
+    errorSyn(yylineno);
+    exit(0);
+}
+
+int main() {
+/*
+	int res = yyparse();
+	if(res == 0){
+		if(symbols_tables.getSymbolType("main").compare("VOID")!=0 || !symbols_tables.getFuncArgs("main").empty())
+					{errorMainMissing(); exit(0);}
+		 symbols_tables.closeScope(regular_scope);
+	}
+	*/
+
+	return res;
+}

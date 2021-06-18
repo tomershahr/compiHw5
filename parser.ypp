@@ -1,0 +1,384 @@
+%{
+    #include "Nodes.cpp"
+	#include <iostream>
+	#include "hw3_output.hpp"
+	#include "tables.cpp"
+	using namespace output;
+	using namespace std;
+
+
+	extern int yylineno;
+	extern int yylex();
+	extern char* yytext;
+	void yyerror(const char*);
+	bool compareTypes(Node* token, string type);
+	bool isNumber(Node* token);
+	SymbolTables symbols_tables;
+	string ret_type; //curr function ret type
+
+
+%}
+
+%nonassoc VOID
+%nonassoc INT
+%nonassoc BYTE
+%nonassoc B
+%nonassoc BOOL
+%nonassoc TRUE
+%nonassoc FALSE
+%nonassoc RETURN
+%nonassoc WHILE
+%nonassoc BREAK
+%nonassoc CONTINUE
+%nonassoc SWITCH
+%nonassoc CASE
+%nonassoc DEFAULT
+%nonassoc COLON
+%nonassoc SC
+%nonassoc COMMA
+%nonassoc ID
+%nonassoc NUM
+%nonassoc STRING
+%right ASSIGN
+%left OR
+%left AND
+%left EQUALITY_RELOP
+%nonassoc RELATION_RELOP
+%left PLUS_MINUS
+%left MULT_DIV
+%right NOT
+%left LBRACE RBRACE
+%left LPAREN RPAREN
+%right IF
+%right ELSE
+
+
+%%
+Program : Funcs {
+
+                };
+Funcs : {}
+	  | FuncDecl Funcs {};
+
+
+//FuncDecl : RetType ID LPAREN Formals RPAREN LBRACE Statements RBRACE {tables.pop_back(); offsets.pop_back();};
+
+FuncDecl : FuncDecl1 FuncDec2 {};
+
+FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
+                                                      string func_name = ((Id*)$2)->name;
+                                                      ret_type  =((Type*)$1)->type;
+                                                      if(symbols_tables.findSymbol(func_name)){
+                                                            errorDef(yylineno, func_name); exit(0);
+                                                      }
+
+                                                      if($4 == nullptr){
+                                                          symbols_tables.insertFuncEntry(func_name, ((Type*)$1)->type, vector<string>());
+                                                       }
+                                                      else{
+                                                          vector<string> args_t = ((Arguments*)$4)->types;
+                                                          vector<string> args_n = ((Arguments*)$4)->names;
+                                                          symbols_tables.insertFuncEntry(func_name, ((Type*)$1)->type, args_t);
+                                                          for(unsigned int i=0; i<args_t.size();i++){
+                                                            string var_name = args_n[i];
+                                                            if(symbols_tables.findSymbol(var_name)){
+                                                                      errorDef(yylineno, var_name); exit(0);}
+                                                            symbols_tables.insertFuncArgEntry(args_n[i], args_t[i]);
+                                                          }
+                                                      }
+                                                    };
+
+FuncDec2 :  Statements RBRACE { symbols_tables.closeScope(regular_scope); };
+
+RetType : Type {$$ = $1;}
+		| VOID {$$ = $1;};
+
+Formals : {$$=nullptr;}
+		| FormalsList {$$= $1;};
+
+FormalsList : FormalDecl { $$ = $1;}
+			| FormalDecl COMMA FormalsList {$$ = ((Arguments*)$1)->merge($3);};
+
+FormalDecl : Type ID {$$ = new Arguments($1, $2);};
+
+Statements : Statement {}
+		   | Statements Statement {};
+
+Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(regular_scope);}
+
+		  | Type ID SC {
+		  string type = ((Type*)$1)->type;
+		  string name = ((Id*)$2)->name;
+		  if(symbols_tables.findSymbol(name)){
+		    errorDef(yylineno, name); exit(0);
+			}
+		  symbols_tables.insertEntry(name, type);}
+
+		  | Type ID ASSIGN Exp SC {
+									string id1 = ((Id*)$2)->name;
+
+									if(symbols_tables.findSymbol(id1)){
+										  errorDef(yylineno, id1);
+										  exit(0);
+									}
+									string type1 = ((Type*)$1)->type;
+									string type2 = ((Type*)$4)->type;
+									if(type1.compare(type2)!=0 && (!compareTypes($1, "INT") || !compareTypes($4, "BYTE"))){
+										errorMismatch(yylineno);
+										exit(0);
+									}
+									symbols_tables.insertEntry(id1, type1);
+									$$= new Type(type1);
+									delete $1;
+									delete $2;
+									delete $4;
+								}
+
+		  | ID ASSIGN Exp SC { string id1 = ((Id*)$1)->name;
+		                        Entry entry1;
+                                if(!symbols_tables.findSymbol(id1, &entry1) || entry1.is_func){
+                                      errorUndef(yylineno, id1);
+                                      exit(0);
+                                }
+                                string type2 = ((Type*)$3)->type;
+								string type1 = ((Type*)$1)->type;
+                                if(entry1.type.compare(type2)!=0 &&(entry1.type!= "INT" || !compareTypes($3, "BYTE"))){
+									errorMismatch(yylineno);
+                                    exit(0);
+                                }
+		  }
+		  | Call SC {}
+
+		  | RETURN SC {if(ret_type.compare("VOID")!=0)
+		                {errorMismatch(yylineno); exit(0);}
+		                }
+
+		  | RETURN Exp SC { if(ret_type.compare("VOID")==0)
+		                {errorMismatch(yylineno); exit(0);}
+							string type = ((Type*)$2)->type;
+		                    if(ret_type.compare(type)!=0 && (ret_type != "INT" || type != "BYTE")){
+		                    errorMismatch(yylineno); exit(0);}};
+
+
+		  | IF LPAREN ExpBool RPAREN openScopeMark Statement
+		  {
+              symbols_tables.closeScope(regular_scope);
+		  }
+
+
+
+		  | IF LPAREN ExpBool RPAREN  openScopeMark Statement  ELSE  closeScopeMark openScopeMark Statement{
+		        symbols_tables.closeScope(regular_scope);
+		  }
+
+
+		  | WHILE LPAREN ExpBool RPAREN openWhileScopeMark Statement {
+            	symbols_tables.closeScope(while_scope);
+		  }
+
+		  | BREAK SC {
+		        if(!symbols_tables.insideWhile() && !symbols_tables.insideSwitch())
+		                    {errorUnexpectedBreak(yylineno);exit(0);}
+		  }
+
+		  | CONTINUE SC {
+		        if(!symbols_tables.insideWhile())
+                		     {errorUnexpectedContinue(yylineno);exit(0);}
+		  }
+
+
+
+		  | SwitchExp openSwitchScopeMark LBRACE CaseList RBRACE {
+		        symbols_tables.closeScope(switch_scope);
+		  };
+
+Call : ID LPAREN ExpList RPAREN { string id = ((Id*)$1)->name;
+                                   Entry entry;
+                                    bool is_symbol = symbols_tables.findSymbol(id, &entry);
+
+                                   if(!is_symbol || !entry.is_func){//todo: check if ID is not a func
+                                    errorUndefFunc(yylineno, id);
+                                    exit(0);
+                                   }
+                                  vector<string> exp_types = ((ExpList*)$3)->types;
+                                  vector<string> func_types = entry.args_types;
+                                   if(exp_types.size()!= func_types.size()){
+                                    errorPrototypeMismatch(yylineno, id, func_types);
+                                      exit(0);
+                                   }
+
+                                  for(unsigned int i =0 ; i<exp_types.size();i++){
+                                    if(func_types[i] != exp_types[i] &&(func_types[i]!= "INT" || exp_types[i]!= "BYTE")){
+                                        errorPrototypeMismatch(yylineno, id, func_types);
+                                        exit(0);
+                                    }
+                                  }
+
+								  $$=new Type(entry.type);
+								  delete $1;
+								  delete $3;
+
+
+                        }
+
+	 | ID LPAREN RPAREN {   string id = ((Id*)$1)->name;
+                            Entry entry;
+                             bool is_symbol = symbols_tables.findSymbol(id, &entry);
+                            if(!is_symbol || !entry.is_func){
+                             errorUndefFunc(yylineno, id);
+                             exit(0);
+                            }
+                            if(!entry.args_types.empty()){
+                                errorPrototypeMismatch(yylineno, id, entry.args_types); //todo: need to check if it the correct error.
+                                exit(0);
+							}
+							  $$=new Type(entry.type);
+							  delete $1;
+                        };
+
+ExpList : Exp {$$ = new ExpList($1);delete $1;}
+		| Exp COMMA ExpList {	ExpList* list1 =new ExpList($1);
+								$$ = list1->merge($3);
+								delete $1; delete $3;
+								};
+
+Type : INT {$$ = $1;}
+	 | BYTE {$$ = $1;}
+	 | BOOL {$$ = $1;};
+
+Exp : LPAREN Exp RPAREN {$$ = $2;}
+
+    | Exp MULT_DIV Exp {
+
+	    if(!isNumber($1) || !isNumber($3))
+    	        {errorMismatch(yylineno);exit(0);}
+    	if(compareTypes($1,"INT")|| compareTypes($3,"INT"))
+    	    {$$ = new Type("INT");}
+    	else{$$ = new Type("BYTE");}
+    	delete $1;
+    	delete $3;
+    }
+
+	| Exp PLUS_MINUS Exp {
+	        if(!isNumber($1) || !isNumber($3))
+        	        {errorMismatch(yylineno);exit(0);}
+        	if(compareTypes($1,"INT")|| compareTypes($3,"INT"))
+        	    {$$ = new Type("INT");}
+        	else{$$ = new Type("BYTE");
+        	}
+	}
+
+
+	| ID {
+	    string name = ((Id*)$1)->name;
+	    Entry entry;
+		bool is_symbol =symbols_tables.findSymbol(name, &entry);
+	    if(!is_symbol || (entry.is_func))
+            {errorUndef(yylineno, name); exit(0);}
+		$$ = new Type(entry.type);
+        }
+
+
+	| Call {$$=$1;}
+
+	| NUM { $$ = new Type("INT");}
+
+	| NUM B {
+		int val =((Num*)$1)->value;
+		string str = to_string(val);
+	    if( val> 255)
+	        {errorByteTooLarge(yylineno, str );exit(0);}
+	    $$ =$2;
+	}
+
+	| STRING {$$ =$1;}
+
+	| TRUE {$$ = $1;}
+
+	| FALSE {$$ = $1 ;}
+
+	| NOT Exp {
+	    if(!compareTypes($2,"BOOL"))
+	    {errorMismatch(yylineno);exit(0);}
+	    $$ = $2;
+	}
+
+	| Exp AND Exp {
+	    if(!compareTypes($1,"BOOL") || !compareTypes($3,"BOOL"))
+	    {errorMismatch(yylineno);exit(0);}
+	    $$ = $1;
+	}
+
+	| Exp OR Exp {
+        if(!compareTypes($1,"BOOL") || !compareTypes($3,"BOOL"))
+        {errorMismatch(yylineno);exit(0);}
+        $$ = $1;
+    }
+
+	| Exp EQUALITY_RELOP Exp {
+	    if(!isNumber($1) || !isNumber($3))
+	        {errorMismatch(yylineno);exit(0);}
+	    $$ = new Type("BOOL");
+	}
+
+	| Exp RELATION_RELOP Exp {
+	    if(!isNumber($1) || !isNumber($3))
+    	        {errorMismatch(yylineno);exit(0);}
+    	$$ = new Type("BOOL");
+    };
+
+
+
+CaseList : CaseDecl CaseList {}
+		 | CaseDecl {}
+		 | DEFAULT COLON Statements {};
+
+CaseDecl : CASE NUM COLON Statements {};
+
+
+//additions
+
+SwitchExp : SWITCH LPAREN Exp RPAREN {string type = ((Type*)$3)->type;
+										if(type != "INT" && type != "BYTE")
+										{errorMismatch(yylineno); exit(0);}};
+
+openScopeMark : {symbols_tables.openScope(regular_scope);};
+
+closeScopeMark : {symbols_tables.closeScope(regular_scope);};
+
+openWhileScopeMark : {symbols_tables.openScope(while_scope);};
+
+openSwitchScopeMark : {symbols_tables.openScope(switch_scope);};
+
+ExpBool : Exp{
+    if(!compareTypes($1, "BOOL")){errorMismatch(yylineno); exit(0);}
+};
+%%
+
+bool compareTypes(Node* token, string type){
+    string node_type = ((Type*)token)->type;
+    return (node_type == type);
+}
+
+bool isNumber(Node* token){
+    if(compareTypes(token,"INT") || compareTypes(token,"BYTE")) return true;
+    return false;
+}
+
+
+void yyerror(const char*){
+    errorSyn(yylineno);
+    exit(0);
+}
+
+
+
+int main() {
+	int res = yyparse();
+	if(res == 0){
+		if(symbols_tables.getSymbolType("main").compare("VOID")!=0 || !symbols_tables.getFuncArgs("main").empty())
+					{errorMainMissing(); exit(0);}
+		 symbols_tables.closeScope(regular_scope);
+	}
+	return res;
+}

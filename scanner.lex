@@ -58,8 +58,8 @@ default						return DEFAULT;
 {lbrace}                    return LBRACE;
 {rbrace}                    return RBRACE;
 {assign}                    return ASSIGN;
-{relational}                return RELATION_RELOP;
-{equality}                  return EQUALITY_RELOP;
+{relational}                {yylval = new Relop(string(yytext)); return RELATION_RELOP;}
+{equality}                  {yylval = new Relop(string(yytext)); return EQUALITY_RELOP;}
 [\*\/]						{yylval = new BinOp(string(yytext)); return MULT_DIV ;}
 [\+-]                       {yylval = new BinOp(string(yytext)); return PLUS_MINUS;}
 {id}                        {yylval = new Id(string(yytext));return ID;}

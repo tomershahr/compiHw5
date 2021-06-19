@@ -68,9 +68,6 @@ Program : {init();} Funcs {};
 Funcs : {}
 	  | FuncDecl Funcs {};
 
-
-//FuncDecl : RetType ID LPAREN Formals RPAREN LBRACE Statements RBRACE {tables.pop_back(); offsets.pop_back();};
-
 FuncDecl : FuncDecl1 FuncDec2 {};
 
 FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
@@ -267,11 +264,11 @@ Exp :  Exp MULT_DIV Exp {
 
 
         string op = ((BinOp*)$2)->op == "*"? "mult" : "div";
-        string reg = info.newReg();
-
+        string reg = buff.genRegister();
         bool is_byte = compareTypes($$, "BYTE");
+
         if(op == "div"){
-            checkdiv($$->reg);
+            checkdiv(reg);
             op =  is_byte ? "u" + op : "s" + op;
         }
         buff.emit(reg + " = " + op + " i32 "+ $1->reg +", " +$3->reg);
@@ -293,9 +290,8 @@ Exp :  Exp MULT_DIV Exp {
         	}
 
             string op = ((BinOp*)$2)->op == "+" ? "add" : "sub";
-        	string reg = info.newReg();
+        	string reg = buff.genRegister();
         	$$->reg = reg;
-
         	buff.emit(reg + " = " + op + " i32 "+ $1->reg +", " +$3->reg);
         	if(compareTypes($$,"BYTE")){
         	    truncation($$, reg);
@@ -310,7 +306,7 @@ Exp :  Exp MULT_DIV Exp {
 	    if(!is_symbol || (entry.is_func))
             {errorUndef(yylineno, name); exit(0);}
 		$$ = new Type(entry.type);
-		string reg = info.newReg();
+		string reg = buff.genRegister();
 		$$->reg = reg;
         buff.emit(reg+ "= load i32, i32* "+ entry.loc);
          ///todo: boolean
@@ -322,7 +318,7 @@ Exp :  Exp MULT_DIV Exp {
 
 
 	| NUM { $$ = new Type("INT");
-	        string reg = info.newReg();
+	        string reg = buff.genRegister();
 	        int val = ((Num*)$1)->value;
 	        buff.emit(reg +" = add i32 0, " +to_string(val));
 			$$->reg = reg;
@@ -336,7 +332,7 @@ Exp :  Exp MULT_DIV Exp {
 	        {errorByteTooLarge(yylineno, str );exit(0);}
 
 	    $$ =$2;
-	    string reg = info.newReg();
+	    string reg =  buff.genRegister();
         $$->reg = reg;
         buff.emit(reg +" = add i32 0, " +str );
 
@@ -449,22 +445,23 @@ void init(){
 
 }
 void truncation(Node* node, string reg){
-    string result = info.newReg();
+    string result =  buff.genRegister();
     buff.emit(result + " = and i32 255, "+reg);
     node->reg = result;
 }
 
-void checkdiv(string reg){ //todo: check if needed backpatch
+void checkdiv(string reg){
 
-    string cond = info.newReg();
-    string lbl_t = info.newLabel();
-    string lbl_f = info.newLabel();
-    buff.emit(cond + "= icomp eq i32 0, "+ reg);
-    buff.emit("br i1 "+ cond+ ", label %" +lbl_t + ", label %" +lbl_f);
-    buff.emit(lbl_t + ":"); // divide by zero
-    buff.emit("call void @print(i8* getelementptr( [23 x i*], [23 x i8]* @.zero_err, i32 0, i32 0))");
+    string cond =  buff.genRegister();
+    buff.emit(cond + "= icmp eq i32 0, "+ reg);
+    int loc1 = buff.emit("br i1 "+ cond+ ", label @, label @");
+
+    string lbl_t =  buff.genLabel();
+    buff.emit("call void @print(i8* getelementptr( [23 x i8], [23 x i8]* @.div_err, i32 0, i32 0))");
     buff.emit("call void @exit(i32 0)");
-    buff.emit(lbl_f + ":");
+    string lbl_f =  buff.genLabel();
+    buff.bpatch(buff.makelist({loc1, FIRST}),lbl_t );
+    buff.bpatch(buff.makelist({loc1, SECOND}),lbl_f );
 
 }
 

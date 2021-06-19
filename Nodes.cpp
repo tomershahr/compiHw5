@@ -54,18 +54,18 @@ public:
     String(char* value):Node(), value(value){}
 };
 
-
+/*
 class Binop : public Node{
 public:
     char* operation;
     Binop(char* operation): Node(), operation(operation){}
-};
+};*/
 
 
 class Relop : public Node{
 public:
-    char* relop_op;
-    Relop(char* relop_op): Node(), relop_op(relop_op){}
+    string relop_op;
+    Relop(string relop_op): Node(), relop_op(relop_op){}
 };
 
 class  Arguments: public Node{

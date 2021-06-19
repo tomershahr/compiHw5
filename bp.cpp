@@ -23,6 +23,10 @@ string CodeBuffer::genLabel(){
 	return ret;
 }
 
+string CodeBuffer::genRegister(){
+    return "%reg"+to_string(register_idx++);
+}
+
 int CodeBuffer::emit(const string &s){
     buffer.push_back(s);
 	return buffer.size() - 1;

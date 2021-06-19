@@ -212,9 +212,9 @@ Call : ID LPAREN ExpList RPAREN { string id = ((Id*)$1)->name;
                                         errorPrototypeMismatch(yylineno, id, func_types);
                                         exit(0);
                                     }
-                                  }
 
-								  $$=new Type(entry.type);
+								  $$=new Type(en
+                                  }try.type);
 								  delete $1;
 								  delete $3;
 

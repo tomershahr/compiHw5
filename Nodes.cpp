@@ -27,10 +27,10 @@ public:
 
 };
 
-class BinOp : public Num{
+class BinOp : public Node{
 public:
     string op;
-    BinOp(string& val):Node(), BinOp(val){}
+    BinOp(string val):Node(), op(val){}
 };
 
 

@@ -31,15 +31,7 @@ public:
         return *this;
     }
 
-    void printE(){
-        cout<<"---------------------------------"<<endl;
-        cout<<"- name = "<<name<<endl;
-        cout<<"- type = "<<type<<endl;
-        cout<<"- offset = "<<offset<<endl;
-        cout<<"- isfunc = "<<is_func<<endl;
-        //cout<<"- types = "<<args_types<<endl;
-        cout<<"---------------------------------"<<endl;
-    }
+
 };
 
 /*
@@ -153,7 +145,7 @@ public:
             while_number--;
         if(scope_type == switch_scope)
             switch_number--;
-        endScope();
+        //endScope();
         Table table = tables.back();
         for(unsigned int i=0; i< table.size(); i++){
             string name = table[i].name;
@@ -162,7 +154,7 @@ public:
                 vector<string> args = getFuncArgs(name);
                 types = makeFunctionType(types, args);
             }
-            printID(name , table[i].offset, types);
+            // printID(name , table[i].offset, types);
         }
         offsets.pop_back();
         tables.pop_back();

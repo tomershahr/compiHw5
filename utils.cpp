@@ -4,6 +4,7 @@
 
 #include <string>
 #include <iostream>
+using namespace std;
 
 
 
@@ -14,13 +15,14 @@ class Info {
 
 public:
     static Info& instance(){
-        static InfoInfo inst;//only instance
+        static Info inst;//only instance
         return inst;
     }
 
     string newReg(){
         return "%reg"+ to_string(reg_index++);
     }
+
     string newLabel(){
         return "label_"+to_string(label_index++);
     }

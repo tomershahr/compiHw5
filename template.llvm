@@ -13,20 +13,20 @@ define void @printi(i32) {
    ret void
 }
 
-define i32 @main() {
+define void @main() {
 %reg0 = add i32 0, 2
-%reg1 = add i32 0, 2
-%reg3= icmp eq i32 0, %reg2
-br i1 %reg3, label %label_14, label %label_17
+%reg1 = add i32 0, 0
+%reg3= icmp eq i32 0, %reg1
+br i1 %reg3, label %label_14, label %label_18
 label_14:
 call void @print(i8* getelementptr( [23 x i8], [23 x i8]* @.div_err, i32 0, i32 0))
 call void @exit(i32 0)
-label_17:
+br label %label_18
+label_18:
 %reg2 = sdiv i32 %reg0, %reg1
 
 
+ret void
 
-
-	ret i32 0
 
 }

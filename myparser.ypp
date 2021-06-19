@@ -268,7 +268,7 @@ Exp :  Exp MULT_DIV Exp {
         bool is_byte = compareTypes($$, "BYTE");
 
         if(op == "div"){
-            checkdiv(reg);
+            checkdiv($3->reg);
             op =  is_byte ? "u" + op : "s" + op;
         }
         buff.emit(reg + " = " + op + " i32 "+ $1->reg +", " +$3->reg);
@@ -454,14 +454,20 @@ void checkdiv(string reg){
 
     string cond =  buff.genRegister();
     buff.emit(cond + "= icmp eq i32 0, "+ reg);
-    int loc1 = buff.emit("br i1 "+ cond+ ", label @, label @");
+    int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
 
     string lbl_t =  buff.genLabel();
     buff.emit("call void @print(i8* getelementptr( [23 x i8], [23 x i8]* @.div_err, i32 0, i32 0))");
-    buff.emit("call void @exit(i32 0)");
+	buff.emit("call void @exit(i32 0)");
+	int loc_t = buff.emit("\tbr label @");
+
     string lbl_f =  buff.genLabel();
-    buff.bpatch(buff.makelist({loc1, FIRST}),lbl_t );
-    buff.bpatch(buff.makelist({loc1, SECOND}),lbl_f );
+	//int loc_t = buff.emit("\tbr label @");
+
+    buff.bpatch(buff.makelist({loc, FIRST}),lbl_t );
+    buff.bpatch(buff.makelist({loc, SECOND}),lbl_f );
+	buff.bpatch(buff.makelist({loc_t, FIRST}),lbl_f );
+
 
 }
 

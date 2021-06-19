@@ -1,0 +1,32 @@
+
+@.str_specifier = constant [4 x i8] c"%s\0A\00"
+@.int_specifier = constant [4 x i8] c"%d\0A\00"
+@.div_err = constant [23 x i8] c"Error division by zero\00"
+declare i32 @printf(i8*, ...)
+declare void @exit(i32)
+define void @print(i8*) {
+   call i32 (i8*, ...) @printf(i8* getelementptr ([4 x i8], [4 x i8]* @.str_specifier, i32 0, i32 0), i8* %0)
+   ret void
+}
+define void @printi(i32) {
+   call i32 (i8*, ...) @printf(i8* getelementptr ([4 x i8], [4 x i8]* @.int_specifier, i32 0, i32 0), i32 %0)
+   ret void
+}
+
+define i32 @main() {
+%reg0 = add i32 0, 2
+%reg1 = add i32 0, 2
+%reg3= icmp eq i32 0, %reg2
+br i1 %reg3, label %label_14, label %label_17
+label_14:
+call void @print(i8* getelementptr( [23 x i8], [23 x i8]* @.div_err, i32 0, i32 0))
+call void @exit(i32 0)
+label_17:
+%reg2 = sdiv i32 %reg0, %reg1
+
+
+
+
+	ret i32 0
+
+}

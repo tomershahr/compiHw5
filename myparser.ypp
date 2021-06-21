@@ -136,7 +136,9 @@ Statements : Statement {$$= $1}
 		    $$= $3;
 		   };
 
-Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(regular_scope);}
+Statement : LBRACE openScopeMark Statements RBRACE {
+            symbols_tables.closeScope(regular_scope);
+          }
 
 
 		  | Type ID SC {
@@ -216,15 +218,31 @@ Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(re
 		                };
 
 
-		  | IF LPAREN ExpBool RPAREN openScopeMark Statement
+		  | IF LPAREN ExpBool RPAREN openScopeMark  M Statement
 		  {
               symbols_tables.closeScope(regular_scope);
+              Type* exp = (Type*)$3;
+
+              buff.bpatch(exp->true_list, ((Marker*)$6)->quad);
+              $$ = new Statement();
+              $$->next_list = buff.merge(exp->false_list, ((Statement*)$7)->next_list);
 		  }
 
 
 
-		  | IF LPAREN ExpBool RPAREN  openScopeMark Statement  ELSE  closeScopeMark openScopeMark Statement{
+		  | IF LPAREN ExpBool RPAREN openScopeMark M Statement ELSE closeScopeMark openScopeMark N M Statement{
 		        symbols_tables.closeScope(regular_scope);
+		        Type* exp = (Type*)$3;
+		        Statement* true_s = (State,emt*)$7;
+		        Statement* false_s = (State,emt*)$13;
+		        buff.bpatch(exp->true_list, ((Marker*)$6)->quad);
+		        buff.bpatch(exp->false_list, ((Marker*)$12)->quad);
+
+		         $$ = new Statement();
+		         $$->next_list = bf.merge( $$->next_list,false_s->next_list );
+		         $$->next_list = bf.merge( $$->next_list,true_s->next_list ); // todo: check this one with someone who understands
+		         $$->next_list = bf.merge( $$->next_list,((NextMarker*)$11)->next_list);
+
 		  }
 
 
@@ -492,7 +510,10 @@ CaseDecl : CASE NUM COLON Statements {};
 //additions
 
 M : {$$ = new Marker(buff.genLabel();};
-
+N : {
+     int loc = emit("br label @ ");
+     $$ = new NextMarker(loc);
+};
 
 SwitchExp : SWITCH LPAREN Exp RPAREN {string type = ((Type*)$3)->type;
 										if(type != "INT" && type != "BYTE")
@@ -507,7 +528,11 @@ openWhileScopeMark : {symbols_tables.openScope(while_scope);};
 openSwitchScopeMark : {symbols_tables.openScope(switch_scope);};
 
 ExpBool : Exp{
-    if(!compareTypes($1, "BOOL")){errorMismatch(yylineno); exit(0);}
+    if(!compareTypes($1, "BOOL")){
+    errorMismatch(yylineno);
+    exit(0);
+    }
+    $$=$1;
 };
 %%
 

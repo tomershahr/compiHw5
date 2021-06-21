@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include "bp.hpp"
 using namespace std;
 
 
@@ -74,6 +75,13 @@ public:
     Marker(string quad):Node(),quad(quad){}
 };
 
+class NextMarker: public Node{
+public:
+    vector<pair<int, BranchLabelIndex>> next_list;
+    NextMarker(int _loc): Node(), next_list(){
+        next_list.push({_loc, FIRST});
+    }
+};
 /*
 class Binop : public Node{
 public:

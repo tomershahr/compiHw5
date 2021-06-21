@@ -64,7 +64,7 @@ default						return DEFAULT;
 [\+-]                       {yylval = new BinOp(string(yytext)); return PLUS_MINUS;}
 {id}                        {yylval = new Id(string(yytext));return ID;}
 {num}                       {yylval = new Num(string(yytext));return NUM;}
-{string}                    {yylval = new Type(string("STRING"));return STRING;}
+{string}                    {yylval = new String(string(yytext));return STRING;}
 {comment}                   ;
 {whitespace}                ;
 .                           {output::errorLex(yylineno);exit(0);};

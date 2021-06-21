@@ -27,6 +27,12 @@ public:
 
 };
 
+ class Statement : public Node{
+ public:
+     vector<pair<int,BranchLabelIndex>> next_list;
+     Statement(): Node(), next_list(){}
+ };
+
 class BinOp : public Node{
 public:
     string op;
@@ -44,14 +50,28 @@ public:
 class Type : public Node{
 public:
     string type;
-    Type(string in_type):Node(), type(in_type){}
+    vector<pair<int, BranchLabelIndex>> true_list;
+    vector<pair<int, BranchLabelIndex>> false_list;
+    Type(string in_type):Node(), type(in_type),true_list(),false_list(){}
+    //Type(string in_type):Node(), type(in_type),true_list(true_list){}
+
 };
 
 
-class String : public Node{
+
+
+class String : public Type{
 public:
     string value;
-    String(char* value):Node(), value(value){}
+    String(string value):Type("STRING"), value(value){}
+};
+
+
+
+class Marker : public Node{
+public:
+    string quad;
+    Marker(string quad):Node(),quad(quad){}
 };
 
 /*

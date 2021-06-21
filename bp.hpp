@@ -39,7 +39,7 @@ public:
 	For each {buffer_location, branch_label_index} item in address_list, backpatches the branch command 
 	at buffer_location, at index branch_label_index (FIRST or SECOND), with the label.
 	note - the function expects to find a '@' char in place of the missing label.
-	note - for unconditional branches (which contain only a single label) use FIRST as the branch_label_index.
+	notelabel) us - for unconditional branches (which contain only a single e FIRST as the branch_label_index.
 	example #1:
 	int loc1 = emit("br label @");  - unconditional branch missing a label. ~ Note the '@' ~
 	bpatch(makelist({loc1,FIRST}),"my_label"); - location loc1 in the buffer will now contain the command "br label %my_label"

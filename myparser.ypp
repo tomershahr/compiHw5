@@ -19,13 +19,12 @@
 	SymbolTables symbols_tables;
 	string ret_type; //curr function ret type
 
-	CodeBuffer& buff =CodeBuffer::instance();
+	CodeBuffer& buff = CodeBuffer::instance();
 	Info& info = Info::instance();
 	void checkdiv(string reg);
 	void init();
 	void truncation(Node* node, string reg);
-
-
+    string vars_ptr; // pointer to the current register holds the local variables to current function.
 
 %}
 
@@ -77,6 +76,7 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                             errorDef(yylineno, func_name); exit(0);
                                                       }
 
+                                                      string define="define "+ret_type+" @"+func_name+"(";
                                                       if($4 == nullptr){
                                                           symbols_tables.insertFuncEntry(func_name, ((Type*)$1)->type, vector<string>());
                                                        }
@@ -89,11 +89,35 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                             if(symbols_tables.findSymbol(var_name)){
                                                                       errorDef(yylineno, var_name); exit(0);}
                                                             symbols_tables.insertFuncArgEntry(args_n[i], args_t[i]);
+                                                            define+="i32,";
                                                           }
+                                                          define.pop();
+                                                      }
+                                                      define+="){";
+                                                      buff.emit(define);
+                                                      string alloc = buff.genRegister();
+                                                      vars_ptr = alloc;
+                                                      buff.emit(alloc +"=alloca[50 x i32]");
+                                                      for(unsigned int i=0; i<args_t.size();i++){//TODO:ASK SHIMON
+                                                        string arg_ptr = buff.genRegister();
+                                                        buff.emit(arg_ptr+"= alloca i32");
+                                                        buff.emit("store i32 %"+i+" , i32* "+arg_ptr);
                                                       }
                                                     };
 
-FuncDec2 :  Statements RBRACE { symbols_tables.closeScope(regular_scope); };
+FuncDec2 :  Statements RBRACE {
+        symbols_tables.closeScope(regular_scope);
+
+         int loc = buff.emit("br label @");
+		 string label = buff.genLabel();
+		 vector<pair<int,BranchLabelIndex>> bp_list = buff.makelist({loc, FIRST});
+		 bp_list = merge(bp_list, ((Statement)*$1)->nextList);
+		 buf.bpatch(bp_list, label);
+         string ret = ret_type == "VOID" ? "ret void" : "ret i32 0";
+        buff.emit(ret);
+        buff.emit("}");
+
+ };
 
 RetType : Type {$$ = $1;}
 		| VOID {$$ = $1;};
@@ -106,10 +130,14 @@ FormalsList : FormalDecl { $$ = $1;}
 
 FormalDecl : Type ID {$$ = new Arguments($1, $2);};
 
-Statements : Statement {}
-		   | Statements Statement {};
+Statements : Statement {$$= $1}
+		   | Statements M Statement {
+		    buff.bpatch(((Statement*)$1)->next_list, ((Marker*)$2)->quad));
+		    $$= $3;
+		   };
 
 Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(regular_scope);}
+
 
 		  | Type ID SC {
 		  string type = ((Type*)$1)->type;
@@ -117,7 +145,14 @@ Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(re
 		  if(symbols_tables.findSymbol(name)){
 		    errorDef(yylineno, name); exit(0);
 			}
-		  symbols_tables.insertEntry(name, type);}
+		  symbols_tables.insertEntry(name, type);
+		  $$ = new Statement();
+		  int offset = symbols_tables.currentOffset();
+		  string var = buff.genRegister();
+		  buff.emit(var + " =  getelementptr [50 x i32], [50 x i32]* " + vars_ptr + ", i32 0, i32 " + to_string(offset));
+          buff.emit("store i32 0, i32* "+var);
+
+		  }
 
 		  | Type ID ASSIGN Exp SC {
 									string id1 = ((Id*)$2)->name;
@@ -306,16 +341,17 @@ Exp :  Exp MULT_DIV Exp {
 	    if(!is_symbol || (entry.is_func))
             {errorUndef(yylineno, name); exit(0);}
 		$$ = new Type(entry.type);
-		string reg = buff.genRegister();
-		$$->reg = reg;
-        buff.emit(reg+ "= load i32, i32* "+ entry.loc);
-         ///todo: boolean
-
-
-        }
-
-
-
+		//string reg = buff.genRegister();
+        //$$->reg = reg;
+        //buff.emit(reg+ "= load i32, i32* "+ entry.loc);
+	    if(compareTypes($1,"BOOL")){
+	        string cond = buff.genRegister();
+	        buff.emit(cond + "= icmp eq i32 1,"+ reg);
+            int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
+            $$->true_list = buff.makelist({loc,FIRST});
+            $$->false_list = buff.makelist({loc,SECOND});
+	    }
+    }
 
 	| NUM { $$ = new Type("INT");
 	        string reg = buff.genRegister();
@@ -345,40 +381,87 @@ Exp :  Exp MULT_DIV Exp {
 //////////////////////
 	| Call {$$=$1;}
 
-	| STRING {$$ =$1;}
+	| STRING {
+	        $$ =$1;
+	}
 
-	| TRUE {$$ = $1;}
+	| TRUE {
+	    $$ = $1;
+	    string reg = buff.genRegister();
+        int loc = buff.emit("br label @");
+        $$->true_list = buff.makelist({loc,FIRST});
+	}
 
-	| FALSE {$$ = $1 ;}
+	| FALSE {
+	    $$ = $1 ;
+	    string reg = buff.genRegister();
+        int loc = buff.emit("br label @");
+        $$->false_list = buff.makelist({loc,FIRST});
+	    }
 
 	| NOT Exp {
 	    if(!compareTypes($2,"BOOL"))
 	    {errorMismatch(yylineno);exit(0);}
 	    $$ = $2;
+	    $$->true_list = $2->false_list;
+	    $$->false_list = $2->true_list;
+
 	}
 
-	| Exp AND Exp {
+	| Exp AND M Exp {
 	    if(!compareTypes($1,"BOOL") || !compareTypes($3,"BOOL"))
 	    {errorMismatch(yylineno);exit(0);}
-	    $$ = $1;
-	}
+        buff.bpatch($1->true_list,((Marker*)$3)->quad);
+        $$ = $4;
+        $$->false_list = buff.merge($1->false_list, $4->false_list);}
 
-	| Exp OR Exp {
+	| Exp OR M Exp {
         if(!compareTypes($1,"BOOL") || !compareTypes($3,"BOOL"))
         {errorMismatch(yylineno);exit(0);}
-        $$ = $1;
+        buff.bpatch($1->false_list,((Marker*)$3)->quad);
+        $$ = $4;
+        $$->true_list = buff.merge($1->true_list, $4->true_list);
     }
 
 	| Exp EQUALITY_RELOP Exp {
 	    if(!isNumber($1) || !isNumber($3))
 	        {errorMismatch(yylineno);exit(0);}
 	    $$ = new Type("BOOL");
+	    string cond = buff.genRegister();
+	    string op = $2->relop_op;
+	    if(op == "=")
+	        buff.emit(cond + "= icmp eq i32 " + $1->reg + ","+ $3->reg);
+	    else
+	        buff.emit(cond + "= icmp ne i32 " + $1->reg + ","+ $3->reg);
+	    int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
+	    $$->true_list = buff.makelist({loc,FIRST});
+        $$->false_list = buff.makelist({loc,SECOND});
 	}
 
 	| Exp RELATION_RELOP Exp {
 	    if(!isNumber($1) || !isNumber($3))
     	        {errorMismatch(yylineno);exit(0);}
     	$$ = new Type("BOOL");
+    	string cond = buff.genRegister();
+        string op = $2->relop_op;
+        switch(op){
+            case("<="):
+                    buff.emit(cond + "= icmp sle i32 " + $1->reg + ","+ $3->reg);
+                    break;
+            case(">="):
+                    buff.emit(cond + "= icmp sge i32 " + $1->reg + ","+ $3->reg);
+                    break;
+            case("<"):
+                    buff.emit(cond + "= icmp slt i32 " + $1->reg + ","+ $3->reg);
+                    break;
+            case(">"):
+                    buff.emit(cond + "= icmp sgt i32 " + $1->reg + ","+ $3->reg);
+                    break;
+                   }
+         int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
+         $$->true_list = buff.makelist({loc,FIRST});
+         $$->false_list = buff.makelist({loc,SECOND});
+         //$$->reg =//TODO: CHECKKKKKKKKKKKKKKKKK
     };
 
 
@@ -391,6 +474,9 @@ CaseDecl : CASE NUM COLON Statements {};
 
 
 //additions
+
+M : {$$ = new Marker(buff.genLabel();};
+
 
 SwitchExp : SWITCH LPAREN Exp RPAREN {string type = ((Type*)$3)->type;
 										if(type != "INT" && type != "BYTE")

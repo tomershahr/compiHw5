@@ -172,4 +172,7 @@ public:
         return false;
     }
 
+    int currentOffset(){
+        return offsets.top()-1;
+    }
 };

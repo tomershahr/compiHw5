@@ -255,12 +255,14 @@ Statement : LBRACE openScopeMark Statements RBRACE {
             	symbols_tables.closeScope(while_scope);
             	 Type* exp = (Type*)$4;
             	 string lbl_t = ((Marker*)$7)->quad;
-            	 string lbl_w = ((Marker*)$3)->quad;
+            	 string lbl_while = ((Marker*)$3)->quad;
             	 Statement* statement = (Statement*)$8;
             	 buff.bpatch(exp->true_list, lbl_t);
-            	 buff.bpatch(statement->next_list, lbl_w);
+            	 buff.bpatch(statement->next_list, lbl_while);
             	 $$ = new Statement();
             	 ((Statement*)$$)->next_list = buff.merge(((Statement*)$$)->next_list, exp->false_list);
+				 int loc = buff.emit("br label @");
+				buff.bpatch(buff.makelist({loc, FIRST}), lbl_while);
 
 
 		  }

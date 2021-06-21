@@ -189,15 +189,31 @@ Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(re
 		  }
 		  | Call SC {}
 
-		  | RETURN SC {if(ret_type.compare("VOID")!=0)
-		                {errorMismatch(yylineno); exit(0);}
+		  | RETURN SC {
+		                    if(ret_type.compare("VOID")!=0)
+                            {
+		                        errorMismatch(yylineno); exit(0);
+		                    }
+		                    buff.emit("ret void");
+		                    $$ = new Statement();
 		                }
 
-		  | RETURN Exp SC { if(ret_type.compare("VOID")==0)
-		                {errorMismatch(yylineno); exit(0);}
+		  | RETURN Exp SC { if(ret_type.compare("VOID")==0){
+                                errorMismatch(yylineno); exit(0);
+                            }
 							string type = ((Type*)$2)->type;
 		                    if(ret_type.compare(type)!=0 && (ret_type != "INT" || type != "BYTE")){
-		                    errorMismatch(yylineno); exit(0);}};
+		                        errorMismatch(yylineno);
+		                        exit(0);
+		                    }
+		                    string res =$2->reg;
+		                    if(ret_type == "BOOL"){
+                                res = phiOp($2);
+		                    }
+
+		                     emit("ret i32 " + res);
+		                     $$ = new Statement();
+		                };
 
 
 		  | IF LPAREN ExpBool RPAREN openScopeMark Statement
@@ -496,13 +512,6 @@ ExpBool : Exp{
 %%
 
 
-
-
-
-
-
-
-
 void init(){
 
      //lib funcs
@@ -530,6 +539,22 @@ void init(){
 
 
 }
+string phiOp(Type* exp){
+
+    string lbl_f = genLabel();
+    int loc_f = emit("br label @ ");
+    string lbl_t = genLabel();
+    int loc_t = emit("br label @ ");
+    buff.bpatch(exp->true_list, lbl_t);
+    buff.bpatch(exp->false_list, lbl_f);
+    string lbl_phi = genLabel();
+    buff.bpatch(makeList({loc_t,FIRST}), lbl_phi);
+    buff.bpatch(makeList({loc_f,FIRST}), lbl_phi);
+    string result = buff.genRegister();
+    emit(result + " = phi i32 [0, %"+lbl_f+"], [1, %"+lbl_t+"]");
+    return result;
+}
+
 void truncation(Node* node, string reg){
     string result =  buff.genRegister();
     buff.emit(result + " = and i32 255, "+reg);

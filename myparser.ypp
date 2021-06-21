@@ -298,7 +298,7 @@ Exp :  Exp MULT_DIV Exp {
     	else{$$ = new Type("BYTE");}
 
 
-        string op = ((BinOp*)$2)->op == "*"? "mult" : "div";
+        string op = ((BinOp*)$2)->op == "*"? "mul" : "div";
         string reg = buff.genRegister();
         bool is_byte = compareTypes($$, "BYTE");
 

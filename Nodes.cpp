@@ -28,11 +28,11 @@ public:
 
 };
 
- class Statement : public Node{
- public:
-     vector<pair<int,BranchLabelIndex>> next_list;
-     Statement(): Node(), next_list(){}
- };
+class Statement : public Node{
+public:
+    vector<pair<int,BranchLabelIndex>> next_list;
+    Statement(): Node(), next_list(){}
+};
 
 class BinOp : public Node{
 public:
@@ -69,19 +69,19 @@ public:
 
 
 
-class Marker : public Node{
-public:
-    string quad;
-    Marker(string quad):Node(),quad(quad){}
-};
 
 class NextMarker: public Node{
 public:
     vector<pair<int, BranchLabelIndex>> next_list;
-    NextMarker(int _loc): Node(), next_list(){
-        next_list.push({_loc, FIRST});
-    }
+    NextMarker(): Node(), next_list(){}
 };
+
+class Marker : public Node{
+public:
+    string quad;
+    Marker(string q): Node(), quad(q){}
+};
+
 /*
 class Binop : public Node{
 public:

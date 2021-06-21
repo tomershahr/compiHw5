@@ -173,6 +173,6 @@ public:
     }
 
     int currentOffset(){
-        return offsets.top()-1;
+        return offsets.back()-1;
     }
 };

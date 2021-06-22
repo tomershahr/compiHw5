@@ -3,8 +3,11 @@
 	#include <iostream>
 	#include "hw3_output.hpp"
 	#include "tables.cpp"
+	#include "bp.hpp"
+	#include "utils.cpp"
 	using namespace output;
 	using namespace std;
+
 
 
 	extern int yylineno;
@@ -16,6 +19,13 @@
 	SymbolTables symbols_tables;
 	string ret_type; //curr function ret type
 
+	CodeBuffer& buff = CodeBuffer::instance();
+	Info& info = Info::instance();
+	void checkdiv(string reg);
+	void init();
+	void truncation(Node* node, string reg);
+    string vars_ptr; // pointer to the current register holds the local variables to current function.
+	string phiOp(Type* exp);
 
 %}
 
@@ -49,46 +59,74 @@
 %right NOT
 %left LBRACE RBRACE
 %left t IF
-      %righLPAREN RPAREN
+%right LPAREN RPAREN
 %right ELSE
 
 
 %%
-Program : Funcs {
-
-                };
+Program : {init();} Funcs {};
 Funcs : {}
 	  | FuncDecl Funcs {};
-
-
-//FuncDecl : RetType ID LPAREN Formals RPAREN LBRACE Statements RBRACE {tables.pop_back(); offsets.pop_back();};
 
 FuncDecl : FuncDecl1 FuncDec2 {};
 
 FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                       string func_name = ((Id*)$2)->name;
                                                       ret_type  =((Type*)$1)->type;
+													  unsigned args_size = 0;
                                                       if(symbols_tables.findSymbol(func_name)){
                                                             errorDef(yylineno, func_name); exit(0);
                                                       }
 
+                                                      string define="define "+ret_type+" @"+func_name+"(";
                                                       if($4 == nullptr){
                                                           symbols_tables.insertFuncEntry(func_name, ((Type*)$1)->type, vector<string>());
                                                        }
                                                       else{
+
                                                           vector<string> args_t = ((Arguments*)$4)->types;
                                                           vector<string> args_n = ((Arguments*)$4)->names;
+														  args_size = args_t.size();
                                                           symbols_tables.insertFuncEntry(func_name, ((Type*)$1)->type, args_t);
-                                                          for(unsigned int i=0; i<args_t.size();i++){
+                                                          for(unsigned int i=0; i<args_size;i++){
                                                             string var_name = args_n[i];
                                                             if(symbols_tables.findSymbol(var_name)){
                                                                       errorDef(yylineno, var_name); exit(0);}
                                                             symbols_tables.insertFuncArgEntry(args_n[i], args_t[i]);
+                                                            define+="i32,";
                                                           }
+                                                          define.pop_back();
+                                                      }
+                                                      define+="){";
+                                                      buff.emit(define);
+                                                      string alloc = buff.genRegister();
+                                                      vars_ptr = alloc;
+                                                      buff.emit(alloc +"=alloca[50 x i32]");
+                                                      for(unsigned int i=0; i<args_size;i++){//TODO:ASK SHIMON
+                                                        string arg_ptr = buff.genRegister();
+                                                        buff.emit(arg_ptr+"= alloca i32");
+                                                        buff.emit("store i32 %"+to_string(i)+" , i32* "+arg_ptr);
                                                       }
                                                     };
 
-FuncDec2 :  Statements RBRACE { symbols_tables.closeScope(regular_scope); };
+FuncDec2 :  Statements RBRACE { ////////////////todo: Chen changes
+        symbols_tables.closeScope(regular_scope);
+
+         //int loc = buff.emit("br label @");
+		 string label = buff.genLabel();
+		 //vector<pair<int,BranchLabelIndex>> bp_list = buff.makelist({loc, FIRST});
+		 //bp_list = buff.merge(bp_list, ((Statement*)$1)->next_list);
+		 //buff.bpatch(bp_list, label);
+		vector<pair<int,BranchLabelIndex>> bp_list = ((Statement*)$1)->next_list;
+
+
+		buff.bpatch(bp_list, label);
+
+        string ret = ret_type == "VOID" ? "ret void" : "ret i32 0";
+        buff.emit(ret);
+        buff.emit("}");
+
+ };
 
 RetType : Type {$$ = $1;}
 		| VOID {$$ = $1;};
@@ -101,10 +139,17 @@ FormalsList : FormalDecl { $$ = $1;}
 
 FormalDecl : Type ID {$$ = new Arguments($1, $2);};
 
-Statements : Statement {}
-		   | Statements Statement {};
+Statements : Statement {
+						$$= $1;}
+		   | Statements M Statement {
+		    buff.bpatch(((Statement*)$1)->next_list, ((Marker*)$2)->quad);
+		    $$= $3;
+		   };
 
-Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(regular_scope);}
+Statement : LBRACE openScopeMark Statements RBRACE {
+            symbols_tables.closeScope(regular_scope);
+          }
+
 
 		  | Type ID SC {
 		  string type = ((Type*)$1)->type;
@@ -112,7 +157,14 @@ Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(re
 		  if(symbols_tables.findSymbol(name)){
 		    errorDef(yylineno, name); exit(0);
 			}
-		  symbols_tables.insertEntry(name, type);}
+		  symbols_tables.insertEntry(name, type);
+		  $$ = new Statement();
+		  int offset = symbols_tables.currentOffset();
+		  string var = buff.genRegister();
+		  buff.emit(var + " =  getelementptr [50 x i32], [50 x i32]* " + vars_ptr + ", i32 0, i32 " + to_string(offset));
+          buff.emit("store i32 0, i32* "+var);
+
+		  }
 
 		  | Type ID ASSIGN Exp SC {
 									string id1 = ((Id*)$2)->name;
@@ -149,31 +201,80 @@ Statement : LBRACE openScopeMark Statements RBRACE {symbols_tables.closeScope(re
 		  }
 		  | Call SC {}
 
-		  | RETURN SC {if(ret_type.compare("VOID")!=0)
-		                {errorMismatch(yylineno); exit(0);}
+		  | RETURN SC {
+		                    if(ret_type.compare("VOID")!=0)
+                            {
+		                        errorMismatch(yylineno); exit(0);
+		                    }
+		                    buff.emit("ret void");
+		                    $$ = new Statement();
 		                }
 
-		  | RETURN Exp SC { if(ret_type.compare("VOID")==0)
-		                {errorMismatch(yylineno); exit(0);}
+		  | RETURN Exp SC { if(ret_type.compare("VOID")==0){
+                                errorMismatch(yylineno); exit(0);
+                            }
 							string type = ((Type*)$2)->type;
 		                    if(ret_type.compare(type)!=0 && (ret_type != "INT" || type != "BYTE")){
-		                    errorMismatch(yylineno); exit(0);}};
+		                        errorMismatch(yylineno);
+		                        exit(0);
+		                    }
+		                    string res =$2->reg;
+		                    if(ret_type == "BOOL"){
+                                res = phiOp((Type*)$2);
+		                    }
+
+		                     buff.emit("ret i32 " + res);
+		                     $$ = new Statement();
+		                };
 
 
-		  | IF LPAREN ExpBool RPAREN openScopeMark Statement
+		  | IF LPAREN ExpBool RPAREN openScopeMark  M Statement
 		  {
               symbols_tables.closeScope(regular_scope);
+              Type* exp = (Type*)$3;
+
+              buff.bpatch(exp->true_list, ((Marker*)$6)->quad);
+              $$ = new Statement();
+              ((Statement*)$$)->next_list = buff.merge(exp->false_list, ((Statement*)$7)->next_list);
+
 		  }
 
 
 
-		  | IF LPAREN ExpBool RPAREN  openScopeMark Statement  ELSE  closeScopeMark openScopeMark Statement{
+		  | IF LPAREN ExpBool RPAREN openScopeMark M Statement ELSE closeScopeMark openScopeMark N M Statement{
 		        symbols_tables.closeScope(regular_scope);
+		        Type* exp = (Type*)$3;
+		        Statement* true_s = (Statement*)$7;
+		        Statement* false_s = (Statement*)$13;
+		        buff.bpatch(exp->true_list, ((Marker*)$6)->quad);
+		        buff.bpatch(exp->false_list, ((Marker*)$12)->quad);
+
+		         $$ = new Statement();
+		         ((Statement*)$$)->next_list = buff.merge( ((Statement*)$$)->next_list,false_s->next_list );
+		         ((Statement*)$$)->next_list = buff.merge( ((Statement*)$$)->next_list,true_s->next_list ); // todo: check this one with someone who understands
+		         ((Statement*)$$)->next_list = buff.merge( ((Statement*)$$)->next_list,((NextMarker*)$11)->next_list);
+
 		  }
 
 
-		  | WHILE LPAREN ExpBool RPAREN openWhileScopeMark Statement {
+		  | WHILE LPAREN M ExpBool RPAREN openWhileScopeMark  M Statement {
             	symbols_tables.closeScope(while_scope);
+
+            	 Type* exp = (Type*)$4;
+            	 string lbl_t = ((Marker*)$7)->quad;
+            	 string lbl_while = ((Marker*)$3)->quad;
+            	 Statement* statement = (Statement*)$8;
+
+            	 buff.bpatch(exp->true_list, lbl_t);
+            	 buff.bpatch(statement->next_list, lbl_while);
+            	 buff.emit("br label %"+lbl_while);
+                 //buff.bpatch(buff.makelist({loc, FIRST}), lbl_while);
+
+            	 $$ = new Statement();
+            	 ((Statement*)$$)->next_list = buff.merge(((Statement*)$$)->next_list, exp->false_list);
+
+
+
 		  }
 
 		  | BREAK SC {
@@ -212,9 +313,9 @@ Call : ID LPAREN ExpList RPAREN { string id = ((Id*)$1)->name;
                                         errorPrototypeMismatch(yylineno, id, func_types);
                                         exit(0);
                                     }
+                                  }
 
-								  $$=new Type(en
-                                  }try.type);
+								  $$=new Type(entry.type);
 								  delete $1;
 								  delete $3;
 
@@ -246,17 +347,34 @@ Type : INT {$$ = $1;}
 	 | BYTE {$$ = $1;}
 	 | BOOL {$$ = $1;};
 
-Exp : LPAREN Exp RPAREN {$$ = $2;}
 
-    | Exp MULT_DIV Exp {
+
+
+Exp :  Exp MULT_DIV Exp {
 
 	    if(!isNumber($1) || !isNumber($3))
     	        {errorMismatch(yylineno);exit(0);}
     	if(compareTypes($1,"INT")|| compareTypes($3,"INT"))
     	    {$$ = new Type("INT");}
     	else{$$ = new Type("BYTE");}
+
+
+        string op = ((BinOp*)$2)->op == "*"? "mul" : "div";
+        string reg = buff.genRegister();
+        bool is_byte = compareTypes($$, "BYTE");
+
+        if(op == "div"){
+            checkdiv($3->reg);
+            op =  is_byte ? "u" + op : "s" + op;
+        }
+        buff.emit(reg + " = " + op + " i32 "+ $1->reg +", " +$3->reg);
+        $$->reg = reg;
+        if(is_byte){
+            truncation($$, reg);
+        }
     	delete $1;
     	delete $3;
+
     }
 
 	| Exp PLUS_MINUS Exp {
@@ -265,6 +383,14 @@ Exp : LPAREN Exp RPAREN {$$ = $2;}
         	if(compareTypes($1,"INT")|| compareTypes($3,"INT"))
         	    {$$ = new Type("INT");}
         	else{$$ = new Type("BYTE");
+        	}
+
+            string op = ((BinOp*)$2)->op == "+" ? "add" : "sub";
+        	string reg = buff.genRegister();
+        	$$->reg = reg;
+        	buff.emit(reg + " = " + op + " i32 "+ $1->reg +", " +$3->reg);
+        	if(compareTypes($$,"BYTE")){
+        	    truncation($$, reg);
         	}
 	}
 
@@ -276,55 +402,129 @@ Exp : LPAREN Exp RPAREN {$$ = $2;}
 	    if(!is_symbol || (entry.is_func))
             {errorUndef(yylineno, name); exit(0);}
 		$$ = new Type(entry.type);
-        }
+		string reg = buff.genRegister();
+        $$->reg = reg;
+        buff.emit(reg+ "= load i32, i32* "+ entry.loc);
+	    if(compareTypes($1,"BOOL")){
+	        string cond = buff.genRegister();
+	        buff.emit(cond + "= icmp eq i32 1,"+ reg);
+            int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
+            ((Type*)$$)->true_list = buff.makelist({loc,FIRST});
+            ((Type*)$$)->false_list = buff.makelist({loc,SECOND});
+	    }
+    }
 
+	| NUM { $$ = new Type("INT");
+	        string reg = buff.genRegister();
+	        int val = ((Num*)$1)->value;
+	        buff.emit(reg +" = add i32 0, " +to_string(val));
+			$$->reg = reg;
 
-	| Call {$$=$1;}
-
-	| NUM { $$ = new Type("INT");}
+	}
 
 	| NUM B {
 		int val =((Num*)$1)->value;
 		string str = to_string(val);
 	    if( val> 255)
 	        {errorByteTooLarge(yylineno, str );exit(0);}
+
 	    $$ =$2;
+	    string reg =  buff.genRegister();
+        $$->reg = reg;
+        buff.emit(reg +" = add i32 0, " +str );
+
 	}
 
-	| STRING {$$ =$1;}
 
-	| TRUE {$$ = $1;}
 
-	| FALSE {$$ = $1 ;}
+
+
+//////////////////////
+	| Call {$$=$1;}
+
+	| STRING {
+	        $$ =$1;
+	}
+
+	| TRUE {
+	    $$ = $1;
+	    string reg = buff.genRegister();
+        int loc = buff.emit("br label @");
+        ((Type*)$$)->true_list = buff.makelist({loc,FIRST});
+	}
+
+	| FALSE {
+	    $$ = $1 ;
+	    string reg = buff.genRegister();
+        int loc = buff.emit("br label @");
+        ((Type*)$$)->false_list = buff.makelist({loc,FIRST});
+	    }
 
 	| NOT Exp {
 	    if(!compareTypes($2,"BOOL"))
 	    {errorMismatch(yylineno);exit(0);}
 	    $$ = $2;
+	    ((Type*)$$)->true_list = ((Type*)$2)->false_list;
+	    ((Type*)$$)->false_list = ((Type*)$2)->true_list;
+
 	}
 
-	| Exp AND Exp {
+	| Exp AND M Exp {
 	    if(!compareTypes($1,"BOOL") || !compareTypes($3,"BOOL"))
 	    {errorMismatch(yylineno);exit(0);}
-	    $$ = $1;
-	}
+        buff.bpatch(((Type*)$1)->true_list,((Marker*)$3)->quad);
+        $$ = $4;
+        ((Type*)$$)->false_list = buff.merge(((Type*)$1)->false_list, ((Type*)$4)->false_list);}
 
-	| Exp OR Exp {
+	| Exp OR M Exp {
         if(!compareTypes($1,"BOOL") || !compareTypes($3,"BOOL"))
         {errorMismatch(yylineno);exit(0);}
-        $$ = $1;
+        buff.bpatch(((Type*)$1)->false_list,((Marker*)$3)->quad);
+        $$ = $4;
+        ((Type*)$$)->true_list = buff.merge(((Type*)$1)->true_list, ((Type*)$4)->true_list);
     }
 
 	| Exp EQUALITY_RELOP Exp {
 	    if(!isNumber($1) || !isNumber($3))
 	        {errorMismatch(yylineno);exit(0);}
 	    $$ = new Type("BOOL");
+	    string cond = buff.genRegister();
+	    string op = ((Relop*)$2)->relop_op;
+	    if(op == "=")
+	        buff.emit(cond + "= icmp eq i32 " + $1->reg + ","+ $3->reg);
+	    else
+	        buff.emit(cond + "= icmp ne i32 " + $1->reg + ","+ $3->reg);
+	    int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
+	    ((Type*)$$)->true_list = buff.makelist({loc,FIRST});
+        ((Type*)$$)->false_list = buff.makelist({loc,SECOND});
 	}
 
 	| Exp RELATION_RELOP Exp {
 	    if(!isNumber($1) || !isNumber($3))
     	        {errorMismatch(yylineno);exit(0);}
     	$$ = new Type("BOOL");
+    	string cond = buff.genRegister();
+        string op = ((Relop*)$2)->relop_op;
+        string sle = "<=";
+
+            if(op =="<=")
+                buff.emit(cond + "= icmp sle i32 " + $1->reg + ","+ $3->reg);
+
+
+            if(op==">=")
+                    buff.emit(cond + "= icmp sge i32 " + $1->reg + ","+ $3->reg);
+;
+            if(op == "<")
+                    buff.emit(cond + "= icmp slt i32 " + $1->reg + ","+ $3->reg);
+
+            if(op ==">")
+                    buff.emit(cond + "= icmp sgt i32 " + $1->reg + ","+ $3->reg);
+
+
+         int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
+         ((Type*)$$)->true_list = buff.makelist({loc,FIRST});
+         ((Type*)$$)->false_list = buff.makelist({loc,SECOND});
+         //$$->reg =//TODO: CHECKKKKKKKKKKKKKKKKK
     };
 
 
@@ -337,6 +537,15 @@ CaseDecl : CASE NUM COLON Statements {};
 
 
 //additions
+
+M : {	string lbl = buff.genLabel();
+		$$ = new Marker(lbl);};
+N : {
+     int loc = buff.emit("br label @ ");
+     NextMarker* ptr = new NextMarker();
+	 ptr->next_list = buff.makelist({loc, FIRST});
+	 $$ = ptr;
+};
 
 SwitchExp : SWITCH LPAREN Exp RPAREN {string type = ((Type*)$3)->type;
 										if(type != "INT" && type != "BYTE")
@@ -351,9 +560,86 @@ openWhileScopeMark : {symbols_tables.openScope(while_scope);};
 openSwitchScopeMark : {symbols_tables.openScope(switch_scope);};
 
 ExpBool : Exp{
-    if(!compareTypes($1, "BOOL")){errorMismatch(yylineno); exit(0);}
+    if(!compareTypes($1, "BOOL")){
+    errorMismatch(yylineno);
+    exit(0);
+    }
+    $$=$1;
 };
 %%
+
+
+void init(){
+
+     //lib funcs
+     buff.emit("declare i32 @printf(i8*, ...)");
+     buff.emit("declare void @exit(i32)");
+
+    //print
+    buff.emitGlobal("@.str_specifier = constant [4 x i8] c\"%s\\0A\\00\"");
+    buff.emit("define void @print(i8*) {");
+    buff.emit("   call i32 (i8*, ...) @printf(i8* getelementptr ([4 x i8], [4 x i8]* @.str_specifier, i32 0, i32 0), i8* %0)");
+    buff.emit("   ret void");
+    buff.emit("}");
+
+
+    //printi
+    buff.emitGlobal("@.int_specifier = constant [4 x i8] c\"%d\\0A\\00\"");
+    buff.emit("define void @printi(i32) {");
+    buff.emit("   call i32 (i8*, ...) @printf(i8* getelementptr ([4 x i8], [4 x i8]* @.int_specifier, i32 0, i32 0), i32 %0)");
+    buff.emit("   ret void");
+    buff.emit("}");
+
+    //errors
+    buff.emitGlobal("@.div_err = constant [23 x i8] c\"Error division by zero\\00\"");
+
+
+
+}
+string phiOp(Type* exp){
+
+    string lbl_f = buff.genLabel();
+    int loc_f = buff.emit("br label @ ");
+    string lbl_t = buff.genLabel();
+    int loc_t = buff.emit("br label @ ");
+    buff.bpatch(exp->true_list, lbl_t);
+    buff.bpatch(exp->false_list, lbl_f);
+    string lbl_phi = buff.genLabel();
+    buff.bpatch(buff.makelist({loc_t,FIRST}), lbl_phi);
+    buff.bpatch(buff.makelist({loc_f,FIRST}), lbl_phi);
+    string result = buff.genRegister();
+    buff.emit(result + " = phi i32 [0, %"+lbl_f+"], [1, %"+lbl_t+"]");
+    return result;
+}
+
+void truncation(Node* node, string reg){
+    string result = buff.genRegister();
+    buff.emit(result + " = and i32 255, "+reg);
+    node->reg = result;
+}
+
+void checkdiv(string reg){
+
+    string cond =  buff.genRegister();
+    buff.emit(cond + "= icmp eq i32 0, "+ reg);
+    int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
+
+    string lbl_t =  buff.genLabel();
+    buff.emit("call void @print(i8* getelementptr( [23 x i8], [23 x i8]* @.div_err, i32 0, i32 0))");
+	buff.emit("call void @exit(i32 0)");
+	int loc_t = buff.emit("br label @");
+
+    string lbl_f =  buff.genLabel();
+	//int loc_t = buff.emit("br label @");
+
+    buff.bpatch(buff.makelist({loc, FIRST}),lbl_t );
+    buff.bpatch(buff.makelist({loc, SECOND}),lbl_f );
+	buff.bpatch(buff.makelist({loc_t, FIRST}),lbl_f );
+
+
+}
+
+
 
 bool compareTypes(Node* token, string type){
     string node_type = ((Type*)token)->type;
@@ -371,8 +657,6 @@ void yyerror(const char*){
     exit(0);
 }
 
-
-
 int main() {
 	int res = yyparse();
 	if(res == 0){
@@ -380,5 +664,7 @@ int main() {
 					{errorMainMissing(); exit(0);}
 		 symbols_tables.closeScope(regular_scope);
 	}
+	buff.printGlobalBuffer();
+	buff.printCodeBuffer();
 	return res;
 }

@@ -26,6 +26,7 @@
 	void truncation(Node* node, string reg);
     string vars_ptr; // pointer to the current register holds the local variables to current function.
 	string phiOp(Type* exp);
+	string convert_type(string type);
 
 %}
 
@@ -78,7 +79,7 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                             errorDef(yylineno, func_name); exit(0);
                                                       }
 
-                                                      string define="define "+ret_type+" @"+func_name+"(";
+                                                      string define="define "+convert_type(ret_type)+" @"+func_name+"(";
                                                       if($4 == nullptr){
                                                           symbols_tables.insertFuncEntry(func_name, ((Type*)$1)->type, vector<string>());
                                                        }
@@ -101,7 +102,7 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                       buff.emit(define);
                                                       string alloc = buff.genRegister();
                                                       vars_ptr = alloc;
-                                                      buff.emit(alloc +"=alloca[50 x i32]");
+                                                      buff.emit(alloc +"=alloca [50 x i32]");
                                                       for(unsigned int i=0; i<args_size;i++){//TODO:ASK SHIMON
                                                         string arg_ptr = buff.genRegister();
                                                         buff.emit(arg_ptr+"= alloca i32");
@@ -259,10 +260,11 @@ Statement : LBRACE openScopeMark Statements RBRACE {
             	 Statement* statement = (Statement*)$8;
             	 buff.bpatch(exp->true_list, lbl_t);
             	 buff.bpatch(statement->next_list, lbl_while);
+				 buff.emit("br label @"+ lbl_while);
             	 $$ = new Statement();
             	 ((Statement*)$$)->next_list = buff.merge(((Statement*)$$)->next_list, exp->false_list);
-				 int loc = buff.emit("br label @");
-				buff.bpatch(buff.makelist({loc, FIRST}), lbl_while);
+
+
 
 
 		  }
@@ -640,7 +642,11 @@ bool isNumber(Node* token){
     if(compareTypes(token,"INT") || compareTypes(token,"BYTE")) return true;
     return false;
 }
+string convert_type(string type){
+	if(type == "VOID") return "void";
+	return "i32";
 
+}
 
 void yyerror(const char*){
     errorSyn(yylineno);

@@ -2,6 +2,7 @@
 #include <vector>
 #include <iostream>
 #include "hw3_output.hpp"
+#include "bp.hpp"
 enum scope_type{regular_scope,while_scope,switch_scope};
 using namespace std;
 using namespace output;
@@ -52,9 +53,10 @@ class SymbolTables{
     int while_number;
     int switch_number;
     vector <string> while_lbls;
+    vector<vector<pair<int,BranchLabelIndex>>> while_breaks;
 
 public:
-    SymbolTables(): curr_func_offset(0),while_number(0),switch_number(0), while_lbls(){
+    SymbolTables(): curr_func_offset(0),while_number(0),switch_number(0), while_lbls(), while_breaks(){
         Table global;
         global.push_back(Entry("print", "VOID",vector<string>(1, "STRING")));
         global.push_back(Entry("printi", "VOID",vector<string>(1, "INT")));
@@ -177,14 +179,22 @@ public:
     int currentOffset(){
         return offsets.back()-1;
     }
-    ////funcs to continue
+    ////funcs to continue && break
     void addWhileLbl(string lbl){
         while_lbls.push_back(lbl);
+        while_breaks.push_back(vector<pair<int,BranchLabelIndex>>());
     }
-    void removeWhileLbl(){
+    vector<pair<int,BranchLabelIndex>> removeWhileLbl(){
         while_lbls.pop_back();
+        vector<pair<int,BranchLabelIndex>> res = while_breaks.back();
+        while_breaks.pop_back();
+        return res;
     }
     string& getLastWhileLbl(){
         return while_lbls.back();
     }
+    void add_break(int loc){
+        while_breaks.back().push_back(pair<int,BranchLabelIndex>(loc, FIRST));
+    }
+
 };

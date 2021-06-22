@@ -271,12 +271,20 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 
             	 $$ = new Statement();
             	 ((Statement*)$$)->next_list = buff.merge(((Statement*)$$)->next_list, exp->false_list);
-				symbols_tables.removeWhileLbl();
+				vector<pair<int,BranchLabelIndex>> breaks_locs = symbols_tables.removeWhileLbl();
+				cout<<"t :" << breaks_locs[0].first<<endl;
+				 ((Statement*)$$)->next_list = buff.merge(((Statement*)$$)->next_list, breaks_locs);
+
 		  }
 
 		  | BREAK SC {
 		        if(!symbols_tables.insideWhile() && !symbols_tables.insideSwitch())
 		                    {errorUnexpectedBreak(yylineno);exit(0);}
+
+		       int loc = buff.emit("br label @");
+			   cout<<"loc "<<loc<<endl;
+		       symbols_tables.add_break(loc);
+		       $$ =new Statement();
 		  }
 
 		  | CONTINUE SC {

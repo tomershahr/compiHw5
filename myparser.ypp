@@ -139,9 +139,10 @@ FormalsList : FormalDecl { $$ = $1;}
 FormalDecl : Type ID {$$ = new Arguments($1, $2);};
 
 Statements : Statement {$$= $1;}
-		   | Statements M Statement {
-		    buff.bpatch(((Statement*)$1)->next_list, ((Marker*)$2)->quad);
-		    $$= $3;
+		   | Statements N M Statement {
+		    buff.bpatch(((Statement*)$1)->next_list, ((Marker*)$3)->quad);
+		    buff.bpatch(((NextMarker*)$2)->next_list, ((Marker*)$3)->quad);
+		    $$= $4;
 		   };
 
 Statement : LBRACE openScopeMark Statements RBRACE {
@@ -263,16 +264,14 @@ Statement : LBRACE openScopeMark Statements RBRACE {
             	 string lbl_while = ((Marker*)$4)->quad;
             	 Statement* statement = (Statement*)$8;
             	 buff.bpatch(exp->true_list, lbl_t);
-
             	 buff.bpatch(statement->next_list, lbl_while);
-				 //cout<<"?"<<endl;
             	 buff.bpatch(((NextMarker*)$1)->next_list, lbl_while);
 				 buff.emit("br label %"+ lbl_while);
 
             	 $$ = new Statement();
             	 ((Statement*)$$)->next_list = buff.merge(((Statement*)$$)->next_list, exp->false_list);
 				vector<pair<int,BranchLabelIndex>> breaks_locs = symbols_tables.removeWhileLbl();
-				cout<<"t :" << breaks_locs[0].first<<endl;
+
 				 ((Statement*)$$)->next_list = buff.merge(((Statement*)$$)->next_list, breaks_locs);
 
 		  }
@@ -282,7 +281,6 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 		                    {errorUnexpectedBreak(yylineno);exit(0);}
 
 		       int loc = buff.emit("br label @");
-			   cout<<"loc "<<loc<<endl;
 		       symbols_tables.add_break(loc);
 		       $$ =new Statement();
 		  }

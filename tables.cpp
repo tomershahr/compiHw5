@@ -51,14 +51,16 @@ class SymbolTables{
     vector<int> offsets;
     int while_number;
     int switch_number;
+    vector <string> while_lbls;
 
 public:
-    SymbolTables(): curr_func_offset(0),while_number(0),switch_number(0){
+    SymbolTables(): curr_func_offset(0),while_number(0),switch_number(0), while_lbls(){
         Table global;
         global.push_back(Entry("print", "VOID",vector<string>(1, "STRING")));
         global.push_back(Entry("printi", "VOID",vector<string>(1, "INT")));
         tables.push_back(global);
         offsets.push_back(0);
+
 
     }
 
@@ -174,5 +176,15 @@ public:
 
     int currentOffset(){
         return offsets.back()-1;
+    }
+    ////funcs to continue
+    void addWhileLbl(string lbl){
+        while_lbls.push_back(lbl);
+    }
+    void removeWhileLbl(){
+        while_lbls.pop_back();
+    }
+    string& getLastWhileLbl(){
+        return while_lbls.back();
     }
 };

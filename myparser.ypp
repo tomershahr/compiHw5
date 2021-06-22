@@ -111,14 +111,17 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                     };
 
 FuncDec2 :  Statements RBRACE {
-        symbols_tables.closeScope(regular_scope);
+      symbols_tables.closeScope(regular_scope);
 
-         int loc = buff.emit("br label @");
+         //int loc = buff.emit("br label @");
 		 string label = buff.genLabel();
-		 vector<pair<int,BranchLabelIndex>> bp_list = buff.makelist({loc, FIRST});
-		 bp_list = buff.merge(bp_list, ((Statement*)$1)->next_list);
-		 buff.bpatch(bp_list, label);
-         string ret = ret_type == "VOID" ? "ret void" : "ret i32 0";
+		 //vector<pair<int,BranchLabelIndex>> bp_list = buff.makelist({loc, FIRST});
+		 //bp_list = buff.merge(bp_list, ((Statement*)$1)->next_list);
+		 //buff.bpatch(bp_list, label);
+		vector<pair<int,BranchLabelIndex>> bp_list = ((Statement*)$1)->next_list; //////
+		buff.bpatch(bp_list, label); /////////
+
+        string ret = ret_type == "VOID" ? "ret void" : "ret i32 0";
         buff.emit(ret);
         buff.emit("}");
 
@@ -143,6 +146,7 @@ Statements : Statement {$$= $1;}
 
 Statement : LBRACE openScopeMark Statements RBRACE {
             symbols_tables.closeScope(regular_scope);
+			$$ = $3;
           }
 
 
@@ -252,21 +256,22 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 		  }
 
 
-		  | WHILE LPAREN M ExpBool RPAREN openWhileScopeMark  M Statement {
+		  | N WHILE LPAREN openWhileScopeMark ExpBool RPAREN M Statement {
             	symbols_tables.closeScope(while_scope);
-            	 Type* exp = (Type*)$4;
+            	 Type* exp = (Type*)$5;
             	 string lbl_t = ((Marker*)$7)->quad;
-            	 string lbl_while = ((Marker*)$3)->quad;
+            	 string lbl_while = ((Marker*)$4)->quad;
             	 Statement* statement = (Statement*)$8;
             	 buff.bpatch(exp->true_list, lbl_t);
+
             	 buff.bpatch(statement->next_list, lbl_while);
-				 buff.emit("br label @"+ lbl_while);
+				 //cout<<"?"<<endl;
+            	 buff.bpatch(((NextMarker*)$1)->next_list, lbl_while);
+				 buff.emit("br label %"+ lbl_while);
+
             	 $$ = new Statement();
             	 ((Statement*)$$)->next_list = buff.merge(((Statement*)$$)->next_list, exp->false_list);
-
-
-
-
+				symbols_tables.removeWhileLbl();
 		  }
 
 		  | BREAK SC {
@@ -277,9 +282,11 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 		  | CONTINUE SC {
 		        if(!symbols_tables.insideWhile())
                 		     {errorUnexpectedContinue(yylineno);exit(0);}
+
+				string lbl = symbols_tables.getLastWhileLbl();
+				buff.emit("br label %" + lbl);
+				$$= new Statement();
 		  }
-
-
 
 		  | SwitchExp openSwitchScopeMark LBRACE CaseList RBRACE {
 		        symbols_tables.closeScope(switch_scope);
@@ -482,7 +489,7 @@ Exp :  Exp MULT_DIV Exp {
 	    $$ = new Type("BOOL");
 	    string cond = buff.genRegister();
 	    string op = ((Relop*)$2)->relop_op;
-	    if(op == "=")
+	    if(op == "==")
 	        buff.emit(cond + "= icmp eq i32 " + $1->reg + ","+ $3->reg);
 	    else
 	        buff.emit(cond + "= icmp ne i32 " + $1->reg + ","+ $3->reg);
@@ -533,7 +540,7 @@ CaseDecl : CASE NUM COLON Statements {};
 M : {	string lbl = buff.genLabel();
 		$$ = new Marker(lbl);};
 N : {
-     int loc = buff.emit("br label @ ");
+     int loc = buff.emit("br label @");
      NextMarker* ptr = new NextMarker();
 	 ptr->next_list = buff.makelist({loc, FIRST});
 	 $$ = ptr;
@@ -547,7 +554,11 @@ openScopeMark : {symbols_tables.openScope(regular_scope);};
 
 closeScopeMark : {symbols_tables.closeScope(regular_scope);};
 
-openWhileScopeMark : {symbols_tables.openScope(while_scope);};
+openWhileScopeMark : { string lbl = buff.genLabel();
+						$$ = new Marker(lbl);
+						symbols_tables.addWhileLbl(lbl);
+						symbols_tables.openScope(while_scope);
+					};
 
 openSwitchScopeMark : {symbols_tables.openScope(switch_scope);};
 

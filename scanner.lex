@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include "Nodes.cpp"
 #include "hw3_output.hpp"
-#include "parser.tab.hpp"
+#include "myparser.tab.hpp"
 
 %}
 
@@ -64,7 +64,7 @@ default						return DEFAULT;
 [\+-]                       {yylval = new BinOp(string(yytext)); return PLUS_MINUS;}
 {id}                        {yylval = new Id(string(yytext));return ID;}
 {num}                       {yylval = new Num(string(yytext));return NUM;}
-{string}                    {yylval = new String(string(yytext));return STRING;}
+{string}                    {yylval = new String(string("STRING"));return STRING;}
 {comment}                   ;
 {whitespace}                ;
 .                           {output::errorLex(yylineno);exit(0);};

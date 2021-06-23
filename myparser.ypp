@@ -113,17 +113,17 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
 FuncDec2 :  Statements RBRACE {
       symbols_tables.closeScope(regular_scope);
 
-         //int loc = buff.emit("br label @");
-		 string label = buff.genLabel();
-		 //vector<pair<int,BranchLabelIndex>> bp_list = buff.makelist({loc, FIRST});
-		 //bp_list = buff.merge(bp_list, ((Statement*)$1)->next_list);
-		 //buff.bpatch(bp_list, label);
-		vector<pair<int,BranchLabelIndex>> bp_list = ((Statement*)$1)->next_list; //////
-		buff.bpatch(bp_list, label); /////////
+        int loc = buff.emit("br label @");
+		string label = buff.genLabel();
+		vector<pair<int,BranchLabelIndex>> bp_list = buff.makelist({loc, FIRST});
+		bp_list = buff.merge(bp_list, ((Statement*)$1)->next_list);
+		buff.bpatch(bp_list, label);
+		//vector<pair<int,BranchLabelIndex>> bp_list = ((Statement*)$1)->next_list; //////
+		//buff.bpatch(bp_list, label); /////////
 
         string ret = ret_type == "VOID" ? "ret void" : "ret i32 0";
         buff.emit(ret);
-        buff.emit(";}");
+        buff.emit("}");
 
  };
 

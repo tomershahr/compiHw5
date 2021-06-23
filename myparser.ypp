@@ -111,13 +111,17 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                     };
 
 FuncDec2 :  Statements RBRACE {
+
       symbols_tables.closeScope(regular_scope);
 
         int loc = buff.emit("br label @");
 		string label = buff.genLabel();
+
 		vector<pair<int,BranchLabelIndex>> bp_list = buff.makelist({loc, FIRST});
+
 		bp_list = buff.merge(bp_list, ((Statement*)$1)->next_list);
 		buff.bpatch(bp_list, label);
+
 		//vector<pair<int,BranchLabelIndex>> bp_list = ((Statement*)$1)->next_list; //////
 		//buff.bpatch(bp_list, label); /////////
 
@@ -139,10 +143,15 @@ FormalsList : FormalDecl { $$ = $1;}
 FormalDecl : Type ID {$$ = new Arguments($1, $2);};
 
 Statements : Statement {$$= $1;}
-		   | Statements N M Statement {
-		    buff.bpatch(((Statement*)$1)->next_list, ((Marker*)$3)->quad);
-		    buff.bpatch(((NextMarker*)$2)->next_list, ((Marker*)$3)->quad);
-		    $$= $4;
+		   | Statements /*N*/ M Statement {
+		    buff.bpatch(((Statement*)$1)->next_list, ((Marker*)$2)->quad);
+			$$=$3;
+
+		    //buff.bpatch(((Statement*)$1)->next_list, ((Marker*)$3)->quad);
+		    //buff.bpatch(((NextMarker*)$2)->next_list, ((Marker*)$3)->quad);
+		    //$$= $4;
+
+
 		   };
 
 Statement : LBRACE openScopeMark Statements RBRACE {
@@ -157,11 +166,13 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 			}
 		  string var = buff.genRegister();
 		  symbols_tables.insertEntry(name,type,var);
-		  $$ = new Statement();
+		  //$$ = new Statement();
 		  int offset = symbols_tables.currentOffset();
 		  buff.emit(var + " =  getelementptr [50 x i32], [50 x i32]* " + vars_ptr + ", i32 0, i32 " + to_string(offset));//TODO:CHECK THE OFFSET
           buff.emit("store i32 0, i32* "+var);
 
+			//#####cheking for switch########
+			$$ = new Statement();
 		  }
 
 		  | Type ID ASSIGN Exp SC {
@@ -190,6 +201,10 @@ Statement : LBRACE openScopeMark Statements RBRACE {
                                     buff.emit(var + " =  getelementptr [50 x i32], [50 x i32]* " + vars_ptr + ", i32 0, i32 " + to_string(offset));
                                     buff.emit("store i32 " +reg+ " , i32* "+var);
 
+									//#####cheking for switch########
+									int loc = buff.emit("br label @");
+									((Statement*)$$)->next_list = buff.makelist({loc, FIRST});
+
 									delete $1;
 									delete $2;
 									delete $4;
@@ -215,6 +230,9 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 
 								$$ = new Statement();
                                 buff.emit("store i32 " +reg+ " , i32* "+ entry1.loc);
+								//#####cheking for switch########
+								int loc = buff.emit("br label @");
+								((Statement*)$$)->next_list = buff.makelist({loc, FIRST});
 		  }
 
 
@@ -301,7 +319,7 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 		                    {errorUnexpectedBreak(yylineno);exit(0);}
 
 		       int loc = buff.emit("br label @");
-		       symbols_tables.add_break(loc);
+		       symbols_tables.addBreak(loc);
 		       $$ =new Statement();
 		  }
 
@@ -321,26 +339,30 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 		        CaseList* cases = (CaseList*)$4;
 		        stack<int> values =cases->values;
 		        stack<string> quads =cases->quads;
-		        while(! values.empty()){
+		        while(!values.empty()){
 		            int value= values.top();
 		            values.pop();
 		            string quad = quads.top();
 		            quads.pop();
 		            string cond = buff.genRegister();
-		            buff.emit(cond + "=  icmp eq i32 "+ value + ", "+ $1->reg );
+		            buff.emit(cond + "=  icmp eq i32 "+ to_string(value) + ", "+ $1->reg );
 		             int loc = buff.emit("br i1 "+ cond+ ", label %" +quad+ ", label @");
 		             string next_check = buff.genLabel();
 		             buff.bpatch(buff.makelist({loc, SECOND}),next_check );
 		        }
 
+
 		        if(cases->default_val)
 		            buff.emit("br label %"+ quads.top());
+
 
 		        vector<pair<int,BranchLabelIndex>> breaks_list = symbols_tables.removeSwitch();
 		        int loc = buff.emit("br label @");
 		        Statement* res = new Statement();
 		        res->next_list = buff.merge(breaks_list, cases->next_list);
 		        res->next_list = buff.merge(res->next_list, buff.makelist({loc, FIRST}));
+				$$=res;
+
 		  };
 
 Call : ID LPAREN ExpList RPAREN { string id = ((Id*)$1)->name;
@@ -580,35 +602,40 @@ Exp :  Exp MULT_DIV Exp {
 
 
 CaseList : CaseDecl CaseList {
-              CaseDecl* curr_case = (CaseDecal*)$1;
+              CaseDecl* curr_case = (CaseDecl*)$1;
               CaseList* prev_list =  (CaseList*)$2;
-              CaseList* res = new CaseList(*prev_list);
+
+              CaseList* res = new CaseList( prev_list->quads,  prev_list->values,  prev_list->default_val);
+
               res->quads.push(curr_case->quad);
               res->values.push(curr_case->value);
-
+			  res->next_list = prev_list->next_list;
+			  $$=res;
               //current case jump to next case if there is no break
-              string next_quad = prev_list.top();
+              string next_quad = prev_list->quads.top();
               buff.bpatch(curr_case->next_list, next_quad);
+
+
 
          }
 		 | CaseDecl {
-		    CaseDecl* case = (CaseDecl*)$1);
-            $$ = new CaseList(case->quad, (case->value);
-             ((CaseList*)$$)->next_list = case->next_list;
+		    CaseDecl* curr_case = (CaseDecl*)$1;
+            $$ = new CaseList(curr_case->quad, curr_case->value);
+             ((CaseList*)$$)->next_list = curr_case->next_list;
 
 		 }
 		 | DEFAULT COLON M Statements {
-		    $$ = new CaseList(((Marker)$3)->quad);
-		    ((CaseList*)$$)->next_list = (Statement*)$4->next_list;;
-
+		    $$ = new CaseList(((Marker*)$3)->quad);
+		    ((CaseList*)$$)->next_list = ((Statement*)$4)->next_list;;
 		 };
 
 CaseDecl : CASE NUM COLON M Statements {
     int num = ((Num*)$2)->value;
     string quad = ((Marker*)$4)->quad;
-    $$ = new CaseDecl(num, quad);
+    $$ = new CaseDecl(quad, num);
    // int loc =emit("br label @")
-   ((CaseDecl*)$$)->next_list = (Statement*)->$5;
+   ((CaseDecl*)$$)->next_list = ((Statement*)$5)->next_list;
+
 };
 
 
@@ -642,7 +669,10 @@ openWhileScopeMark : { string lbl = buff.genLabel();
 
 openSwitchScopeMark : {
                         symbols_tables.openScope(switch_scope);
-                        $$ = new NextMarker();
+                         int loc = buff.emit("br label @");
+						 NextMarker* ptr = new NextMarker();
+						 ptr->next_list = buff.makelist({loc, FIRST});
+						 $$ = ptr;
                         symbols_tables.addSwitch();
                     };
 

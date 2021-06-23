@@ -137,28 +137,32 @@ public:
 class CaseDecl : public Node {
 public:
 
-    strng quad;
+    string quad;
     int value;
     vector<pair<int, BranchLabelIndex>> next_list;
-    CaseDecl(int v, int q): Node(),quad(q), value(v), next_list(){}
+    CaseDecl(string& q, int& v): Node(),quad(q), value(v), next_list(){ }
 };
 
 class CaseList : public Node{
 public:
 
-    stack<strng> quads;
+    stack<string> quads;
     stack<int> values;
     bool default_val;
     vector<pair<int, BranchLabelIndex>> next_list;
 
-    caseList(int& quad):Node(), quads(), values(),default_val(true), next_list(){
+    CaseList(string quad):Node(), quads(), values(),default_val(true), next_list(){
         quads.push(quad);
+
+
     }
 
-    caseList(string& quad, int& value ):Node(), quads(), values(), default_val(false), next_list(){
-            values.push(value);
-            quads.push(quad);
+    CaseList(string quad, int value ):Node(), quads(), values(), default_val(false), next_list(){
+        values.push(value);
+        quads.push(quad);
     }
+    CaseList(stack<string> _quads, stack<int> _values, bool def ):Node(), quads(_quads), values(_values), default_val(def), next_list(){ }
+    //CaseList(CaseList& c)::Node(c), quads(c.quads), values(c.values), default_val(c.default), next_list(c.next_list){}
 
 };
 

@@ -7,6 +7,7 @@
 #define YYSTYPE Node*
 #include <string>
 #include <vector>
+#include <stack>
 #include <iostream>
 #include "bp.hpp"
 using namespace std;
@@ -131,6 +132,34 @@ public:
         this->types.insert(this->types.end(), a2->types.begin(), a2->types.end());
         return this;
     }
+};
+
+class CaseDecl : public Node {
+public:
+
+    strng quad;
+    int value;
+    vector<pair<int, BranchLabelIndex>> next_list;
+    CaseDecl(int v, int q): Node(),quad(q), value(v), next_list(){}
+};
+
+class CaseList : public Node{
+public:
+
+    stack<strng> quads;
+    stack<int> values;
+    bool default_val;
+    vector<pair<int, BranchLabelIndex>> next_list;
+
+    caseList(int& quad):Node(), quads(), values(),default_val(true), next_list(){
+        quads.push(quad);
+    }
+
+    caseList(string& quad, int& value ):Node(), quads(), values(), default_val(false), next_list(){
+            values.push(value);
+            quads.push(quad);
+    }
+
 };
 
 #endif //HW3_NODES_HPP

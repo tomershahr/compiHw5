@@ -149,20 +149,18 @@ Statement : LBRACE openScopeMark Statements RBRACE {
             symbols_tables.closeScope(regular_scope);
 			$$ = $3;
           }
-
-
 		  | Type ID SC {
-		  string type = ((Type*)$1)->type;
-		  string name = ((Id*)$2)->name;
-		  if(symbols_tables.findSymbol(name)){
-		    errorDef(yylineno, name); exit(0);
-			}
-		  symbols_tables.insertEntry(name, type);
-		  $$ = new Statement();
-		  int offset = symbols_tables.currentOffset();
-		  string var = buff.genRegister();
-		  buff.emit(var + " =  getelementptr [50 x i32], [50 x i32]* " + vars_ptr + ", i32 0, i32 " + to_string(offset));
-          buff.emit("store i32 0, i32* "+var);
+              string type = ((Type*)$1)->type;
+              string name = ((Id*)$2)->name;
+              if(symbols_tables.findSymbol(name)){
+                errorDef(yylineno, name); exit(0);
+                }
+              symbols_tables.insertEntry(name, type);
+              $$ = new Statement();
+              int offset = symbols_tables.currentOffset();
+              string var = buff.genRegister();
+              buff.emit(var + " =  getelementptr [50 x i32], [50 x i32]* " + vars_ptr + ", i32 0, i32 " + to_string(offset));
+              buff.emit("store i32 0, i32* "+var);
 
 		  }
 
@@ -296,6 +294,31 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 
 		  | SwitchExp openSwitchScopeMark LBRACE CaseList RBRACE {
 		        symbols_tables.closeScope(switch_scope);
+		        string lbl= buff.genLabel();
+		        buff.bpatch(((NextMarker*)$2)->next_list, lbl);
+		        CaseList* cases = (CaseList*)$4;
+		        stack<int> values =cases->values;
+		        stack<string> quads =cases->quads;
+		        while(! values.empty()){
+		            int value= values.top();
+		            values.pop();
+		            string quad = quads.top();
+		            quads.pop();
+		            string cond = buff.genRegister();
+		            buff.emit(cond + "=  icmp eq i32 "+ value + ", "+ $1->reg );
+		             int loc = buff.emit("br i1 "+ cond+ ", label %" +quad+ ", label @");
+		             string next_check = buff.genLabel();
+		             buff.bpatch(buff.makelist({loc, SECOND}),next_check );
+		        }
+
+		        if(cases->default_val)
+		            buff.emit("br label %"+ quads.top());
+
+		        vector<pair<int,BranchLabelIndex>> breaks_list = symbols_tables.removeSwitch();
+		        int loc = buff.emit("br label @");
+		        Statement* res = new Statement();
+		        res->next_list = buff.merge(breaks_list, cases->next_list);
+		        res->next_list = buff.merge(res->next_list, buff.makelist({loc, FIRST}));
 		  };
 
 Call : ID LPAREN ExpList RPAREN { string id = ((Id*)$1)->name;
@@ -534,11 +557,37 @@ Exp :  Exp MULT_DIV Exp {
 
 
 
-CaseList : CaseDecl CaseList {}
-		 | CaseDecl {}
-		 | DEFAULT COLON Statements {};
+CaseList : CaseDecl CaseList {
+              CaseDecl* curr_case = (CaseDecal*)$1;
+              CaseList* prev_list =  (CaseList*)$2;
+              CaseList* res = new CaseList(*prev_list);
+              res->quads.push(curr_case->quad);
+              res->values.push(curr_case->value);
 
-CaseDecl : CASE NUM COLON Statements {};
+              //current case jump to next case if there is no break
+              string next_quad = prev_list.top();
+              buff.bpatch(curr_case->next_list, next_quad);
+
+         }
+		 | CaseDecl {
+		    CaseDecl* case = (CaseDecl*)$1);
+            $$ = new CaseList(case->quad, (case->value);
+             ((CaseList*)$$)->next_list = case->next_list;
+
+		 }
+		 | DEFAULT COLON M Statements {
+		    $$ = new CaseList(((Marker)$3)->quad);
+		    ((CaseList*)$$)->next_list = (Statement*)$4->next_list;;
+
+		 };
+
+CaseDecl : CASE NUM COLON M Statements {
+    int num = ((Num*)$2)->value;
+    string quad = ((Marker*)$4)->quad;
+    $$ = new CaseDecl(num, quad);
+   // int loc =emit("br label @")
+   ((CaseDecl*)$$)->next_list = (Statement*)->$5;
+};
 
 
 //additions
@@ -554,7 +603,10 @@ N : {
 
 SwitchExp : SWITCH LPAREN Exp RPAREN {string type = ((Type*)$3)->type;
 										if(type != "INT" && type != "BYTE")
-										{errorMismatch(yylineno); exit(0);}};
+										{errorMismatch(yylineno); exit(0);}
+
+										$$= $3;
+									};
 
 openScopeMark : {symbols_tables.openScope(regular_scope);};
 
@@ -566,7 +618,11 @@ openWhileScopeMark : { string lbl = buff.genLabel();
 						symbols_tables.openScope(while_scope);
 					};
 
-openSwitchScopeMark : {symbols_tables.openScope(switch_scope);};
+openSwitchScopeMark : {
+                        symbols_tables.openScope(switch_scope);
+                        $$ = new NextMarker();
+                        symbols_tables.addSwitch();
+                    };
 
 ExpBool : Exp{
     if(!compareTypes($1, "BOOL")){

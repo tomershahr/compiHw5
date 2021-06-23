@@ -20,7 +20,7 @@ public:
     Entry(){}
     Entry(string _name,string _type,int _offset, string loc="") : name(_name), type(_type), offset(_offset), args_types(vector<string>()),  is_func(false), loc(loc){} //for varible
 
-    Entry(string _name,string _type, vector<string> args): name(_name), type(_type), offset(0), args_types(args), is_func(true){} //for func
+    Entry(string _name,string _type, vector<string> args): name(_name), type(_type), offset(0), args_types(args), is_func(true), loc(""){} //for func
     Entry& operator=(const Entry& e){
 
         this->name = e.name;
@@ -28,6 +28,7 @@ public:
         this->offset = e.offset;
         this->args_types = e.args_types;
         this->is_func = e.is_func;
+        this->loc = e.loc;
 
         return *this;
     }

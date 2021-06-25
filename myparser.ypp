@@ -222,7 +222,7 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 
 
 
-		  | Call SC {}
+		  | Call SC { $$ = new Statement();}
 
 		  | RETURN SC {
 		                    if(ret_type.compare("VOID")!=0)
@@ -321,33 +321,57 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 		        symbols_tables.closeScope(switch_scope);
 		  };
 
-Call : ID LPAREN ExpList RPAREN { string id = ((Id*)$1)->name;
+Call : ID LPAREN ExpList RPAREN { string func_name = ((Id*)$1)->name;
                                    Entry entry;
-                                    bool is_symbol = symbols_tables.findSymbol(id, &entry);
+                                    bool is_symbol = symbols_tables.findSymbol(func_name, &entry);
 
                                    if(!is_symbol || !entry.is_func){//todo: check if ID is not a func
-                                    errorUndefFunc(yylineno, id);
+                                    errorUndefFunc(yylineno, func_name);
                                     exit(0);
                                    }
-                                  vector<string> exp_types = ((ExpList*)$3)->types;
+                                  vector<pair<string,string>> exp_types = ((ExpList*)$3)->types;
                                   vector<string> func_types = entry.args_types;
                                    if(exp_types.size()!= func_types.size()){
-                                    errorPrototypeMismatch(yylineno, id, func_types);
+                                    errorPrototypeMismatch(yylineno, func_name, func_types);
                                       exit(0);
                                    }
 
                                   for(unsigned int i =0 ; i<exp_types.size();i++){
-                                    if(func_types[i] != exp_types[i] &&(func_types[i]!= "INT" || exp_types[i]!= "BYTE")){
-                                        errorPrototypeMismatch(yylineno, id, func_types);
+                                    if(func_types[i] != exp_types[i].first &&(func_types[i]!= "INT" || exp_types[i].first!= "BYTE")){
+                                        errorPrototypeMismatch(yylineno, func_name, func_types);
                                         exit(0);
                                     }
                                   }
 
+                                  string reg = buff.genRegister();
+
+
+                                  if(func_name == "printi"){
+                                        buff.emit("call void @printi(i32 "+exp_types[0].second+ ")");
+
+                                  }else if(func_name == "print"){
+                                        buff.emit("call void @print(i8* "+exp_types[0].second+ ")");
+
+                                  }else{
+                                      string return_type = entry.type;
+                                      string ret;
+                                      if(return_type == "VOID"){
+                                             ret="void";}
+                                      else{
+                                             ret="i32";
+                                            buff.emit(reg+"=");
+                                      }
+                                      buff.emit(" call "+ret+" @"+func_name+"(");
+                                      for(int i=0;i<exp_types.size()-1;i++){
+                                              buff.emit("i32 "+exp_types[i].second+",");
+                                      }
+                                      buff.emit("i32 "+exp_types[exp_types.size()-1].second+")");
+                                  }
+
 								  $$=new Type(entry.type);
+								  $$->reg = reg;
 								  delete $1;
 								  delete $3;
-
-
                         }
 
 	 | ID LPAREN RPAREN {   string id = ((Id*)$1)->name;
@@ -467,11 +491,21 @@ Exp :  Exp MULT_DIV Exp {
 
 
 
-//////////////////////
 	| Call {$$=$1;}
 
 	| STRING {
 	        $$ =$1;
+	        string reg = buff.genRegister();
+	        $$->reg = reg;
+	        string str = ((String*)$1)->value;
+	        str.pop_back();
+
+	        string str_idx = buff.genStringIdx();
+	        string str_len = to_string(str.size());
+
+	        buff.emitGlobal(str_idx+ "= internal constant ["+str_len+" x i8] c"+str+"\\00\"");
+	        buff.emit(reg+"= getelementptr ["+str_len+" x i8], ["+str_len+ " x i8]*"+ str_idx+", i8 0, i8 0");
+
 	}
 
 	| TRUE {

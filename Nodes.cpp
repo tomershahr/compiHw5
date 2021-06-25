@@ -119,11 +119,12 @@ public:
 
 class ExpList: public Node{
 public:
-    vector<string> types;
+    vector<pair<string,string>> types;
 
     ExpList(Node* type): Node(), types(){
-        string name = ((Type*)type)->type;
-        types.push_back(name);
+        string type_name = ((Type*)type)->type;
+        string exp_Reg = ((Type*)type)->reg;
+        types.push_back({type_name,exp_Reg});
     }
 
     ExpList* merge(Node* node){

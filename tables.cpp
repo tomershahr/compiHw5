@@ -181,6 +181,19 @@ public:
         return offsets.back()-1;
     }
     ////funcs to continue && break
+    void addSwitch(){
+        while_breaks.push_back(vector<pair<int,BranchLabelIndex>>());
+    }
+    vector<pair<int,BranchLabelIndex>> removeSwitch(){
+        vector<pair<int,BranchLabelIndex>> res = while_breaks.back();
+        while_breaks.pop_back();
+        return res;
+    }
+
+    void addBreak(int loc){
+        while_breaks.back().push_back(pair<int,BranchLabelIndex>(loc, FIRST));
+    }
+
     void addWhileLbl(string lbl){
         while_lbls.push_back(lbl);
         while_breaks.push_back(vector<pair<int,BranchLabelIndex>>());
@@ -194,8 +207,8 @@ public:
     string& getLastWhileLbl(){
         return while_lbls.back();
     }
-    void add_break(int loc){
-        while_breaks.back().push_back(pair<int,BranchLabelIndex>(loc, FIRST));
-    }
+
+
+
 
 };

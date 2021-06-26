@@ -197,6 +197,7 @@ Statement : LBRACE openScopeMark Statements RBRACE {
                                     string reg =$4->reg;
 									if(((Type*)$1)->type == "BOOL"){
                                         reg = phiOp((Type*)$4);
+
 									}//TODO:CHECK IF THE USE OF PHI IS FINE AND UNDERSTAND WHAT IT DOES
 
 									$$ = new Statement();
@@ -207,7 +208,6 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 									//#####cheking for switch########
 									int loc = buff.emit("br label @");
 									((Statement*)$$)->next_list = buff.makelist({loc, FIRST});
-
 									delete $1;
 									delete $2;
 									delete $4;
@@ -227,7 +227,7 @@ Statement : LBRACE openScopeMark Statements RBRACE {
                                 }
 
                                 string reg =$3->reg;
-								if(((Type*)$1)->type == "BOOL"){
+								if(((Type*)$3)->type == "BOOL"){
                                         reg = phiOp((Type*)$3);
 								}//TODO:CHECK IF THE USE OF PHI IS FINE AND UNDERSTAND WHAT IT DOES
 
@@ -396,16 +396,17 @@ Call : ID LPAREN ExpList RPAREN { string func_name = ((Id*)$1)->name;
                                         exit(0);
                                     }
 									if(func_types[i] =="BOOL"){
-										string reg = phiOp((Type*)exps[i]);
-										exp_types[i].second = reg;
+										string bool_res = phiOp((Type*)exps[i]);
+										exp_types[i].second = bool_res;
 									}
 
 
 
                                   }
 
-                                  string reg = buff.genRegister();
 
+								  string call_code;
+								  string reg;
                                   if(func_name == "printi"){
                                         buff.emit("call void @printi(i32 "+exp_types[0].second+ ")");
 
@@ -419,15 +420,19 @@ Call : ID LPAREN ExpList RPAREN { string func_name = ((Id*)$1)->name;
                                              ret="void";}
                                       else{
                                              ret="i32";
-                                            buff.emit(reg+"=");
+											 reg = buff.genRegister();
+											 //todo: ask tomer
+                                            //buff.emit(reg+"=");
+											call_code= reg + " = ";
                                       }
-                                      buff.emit(" call "+ret+" @"+func_name+"(");
+									  call_code += "call "+ret+" @"+func_name+"(";
+                                      //buff.emit(" call "+ret+" @"+func_name+"(");
                                       for(int i=0;i<exp_types.size()-1;i++){
-                                              buff.emit("i32 "+exp_types[i].second+",");
+                                              call_code +="i32 "+exp_types[i].second+", ";
                                       }
-                                      buff.emit("i32 "+exp_types[exp_types.size()-1].second+")");
+                                      call_code += "i32 "+exp_types[exp_types.size()-1].second+")";
                                   }
-
+									buff.emit(call_code);
 								  $$=new Type(entry.type);
 								  $$->reg = reg;
 								  delete $1;
@@ -523,6 +528,7 @@ Exp :   LPAREN Exp RPAREN {$$ = $2;}
             int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
             ((Type*)$$)->true_list = buff.makelist({loc,FIRST});
             ((Type*)$$)->false_list = buff.makelist({loc,SECOND});
+
 	    }
     }
 
@@ -597,7 +603,8 @@ Exp :   LPAREN Exp RPAREN {$$ = $2;}
 	| NOT Exp {
 	    if(!compareTypes($2,"BOOL"))
 	    {errorMismatch(yylineno);exit(0);}
-	    $$ = $2;
+	    $$ = new Type (((Type*)$2)->type);
+		$$->reg = $2->reg;
 	    ((Type*)$$)->true_list = ((Type*)$2)->false_list;
 	    ((Type*)$$)->false_list = ((Type*)$2)->true_list;
 

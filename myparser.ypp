@@ -461,7 +461,8 @@ Type : INT {$$ = $1;}
 
 
 
-Exp :  Exp MULT_DIV Exp {
+Exp :   LPAREN Exp RPAREN {$$ = $2;}
+	|	Exp MULT_DIV Exp {
 
 	    if(!isNumber($1) || !isNumber($3))
     	        {errorMismatch(yylineno);exit(0);}

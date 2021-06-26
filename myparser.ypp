@@ -102,7 +102,7 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                       buff.emit(define);
                                                       string alloc = buff.genRegister();
                                                       vars_ptr = alloc;
-                                                      buff.emit(alloc +"=alloca [50 x i32]");
+                                                      buff.emit(alloc +" = alloca [50 x i32]");
                                                       for(unsigned int i=0; i<args_size;i++){//TODO:ASK SHIMON
                                                         string arg_ptr = buff.genRegister();
                                                         symbols_tables.insertFuncArgEntry(args_n[i], args_t[i],arg_ptr);
@@ -144,7 +144,7 @@ FormalsList : FormalDecl { $$ = $1;}
 FormalDecl : Type ID {$$ = new Arguments($1, $2);};
 
 Statements : Statement {$$= $1;}
-		   | Statements /*N*/ M Statement {
+		   | Statements  M Statement {
 		    buff.bpatch(((Statement*)$1)->next_list, ((Marker*)$2)->quad);
 			$$=$3;
 
@@ -238,7 +238,13 @@ Statement : LBRACE openScopeMark Statements RBRACE {
 
 
 
-		  | Call SC { $$ = new Statement();}
+		  | Call SC {
+
+		            $$ = new Statement();
+		            int loc = buff.emit("br label @");
+                    ((Statement*)$$)->next_list = buff.makelist({loc, FIRST});
+
+		            }
 
 		  | RETURN SC {
 		                    if(ret_type.compare("VOID")!=0)
@@ -375,6 +381,7 @@ Call : ID LPAREN ExpList RPAREN { string func_name = ((Id*)$1)->name;
                                     exit(0);
                                    }
                                   vector<pair<string,string>> exp_types = ((ExpList*)$3)->types;
+								  vector<Node*> exps =((ExpList*)$3)->exps;
                                   vector<string> func_types = entry.args_types;
                                    if(exp_types.size()!= func_types.size()){
                                     errorPrototypeMismatch(yylineno, func_name, func_types);
@@ -386,10 +393,16 @@ Call : ID LPAREN ExpList RPAREN { string func_name = ((Id*)$1)->name;
                                         errorPrototypeMismatch(yylineno, func_name, func_types);
                                         exit(0);
                                     }
+									if(func_types[i] =="BOOL"){
+										string reg = phiOp((Type*)exps[i]);
+										exp_types[i].second = reg;
+									}
+
+
+
                                   }
 
                                   string reg = buff.genRegister();
-
 
                                   if(func_name == "printi"){
                                         buff.emit("call void @printi(i32 "+exp_types[0].second+ ")");
@@ -434,10 +447,9 @@ Call : ID LPAREN ExpList RPAREN { string func_name = ((Id*)$1)->name;
 							  delete $1;
                         };
 
-ExpList : Exp {$$ = new ExpList($1);delete $1;}
+ExpList : Exp {$$ = new ExpList($1);}
 		| Exp COMMA ExpList {	ExpList* list1 =new ExpList($1);
 								$$ = list1->merge($3);
-								delete $1; delete $3;
 								};
 
 Type : INT {$$ = $1;}
@@ -688,7 +700,8 @@ CaseDecl : CASE NUM COLON M Statements {
 
 //additions
 
-M : {	string lbl = buff.genLabel();
+M : {
+		string lbl = buff.genLabel();
 		$$ = new Marker(lbl);};
 N : {
      int loc = buff.emit("br label @");

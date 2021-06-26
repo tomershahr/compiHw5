@@ -502,7 +502,7 @@ Exp :  Exp MULT_DIV Exp {
 		string reg = buff.genRegister();
         $$->reg = reg;
         buff.emit(reg+ "= load i32, i32* "+ entry.loc);
-	    if(compareTypes($1,"BOOL")){
+	    if(compareTypes($$,"BOOL")){
 	        string cond = buff.genRegister();
 	        buff.emit(cond + "= icmp eq i32 1,"+ reg);
             int loc = buff.emit("br i1 "+ cond+ ", label @, label @");
@@ -589,14 +589,14 @@ Exp :  Exp MULT_DIV Exp {
 	}
 
 	| Exp AND M Exp {
-	    if(!compareTypes($1,"BOOL") || !compareTypes($3,"BOOL"))
+	    if(!compareTypes($1,"BOOL") || !compareTypes($4,"BOOL"))
 	    {errorMismatch(yylineno);exit(0);}
         buff.bpatch(((Type*)$1)->true_list,((Marker*)$3)->quad);
         $$ = $4;
         ((Type*)$$)->false_list = buff.merge(((Type*)$1)->false_list, ((Type*)$4)->false_list);}
 
 	| Exp OR M Exp {
-        if(!compareTypes($1,"BOOL") || !compareTypes($3,"BOOL"))
+        if(!compareTypes($1,"BOOL") || !compareTypes($4,"BOOL"))
         {errorMismatch(yylineno);exit(0);}
         buff.bpatch(((Type*)$1)->false_list,((Marker*)$3)->quad);
         $$ = $4;

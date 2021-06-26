@@ -450,7 +450,30 @@ Call : ID LPAREN ExpList RPAREN { string func_name = ((Id*)$1)->name;
                                 errorPrototypeMismatch(yylineno, id, entry.args_types); //todo: need to check if it the correct error.
                                 exit(0);
 							}
-							  $$=new Type(entry.type);
+							///////////////
+							 string func_name = ((Id*)$1)->name;
+							  string call_code;
+								  string reg;
+
+                                      string return_type = entry.type;
+                                      string ret;
+                                      if(return_type == "VOID"){
+                                             ret="void";}
+                                      else{
+                                             ret="i32";
+											 reg = buff.genRegister();
+											 //todo: ask tomer
+                                            //buff.emit(reg+"=");
+											call_code= reg + " = ";
+                                      }
+									  call_code += "call "+ret+" @"+func_name+"()";
+
+
+
+									buff.emit(call_code);
+								  $$=new Type(entry.type);
+								  $$->reg = reg;
+							  ////////
 							  delete $1;
                         };
 

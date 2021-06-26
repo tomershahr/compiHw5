@@ -74,6 +74,8 @@ FuncDecl : FuncDecl1 FuncDec2 {};
 FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                       string func_name = ((Id*)$2)->name;
                                                       ret_type  =((Type*)$1)->type;
+                                                      vector<string> args_t;
+                                                      vector<string> args_n;
 													  unsigned args_size = 0;
                                                       if(symbols_tables.findSymbol(func_name)){
                                                             errorDef(yylineno, func_name); exit(0);
@@ -84,16 +86,14 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                           symbols_tables.insertFuncEntry(func_name, ((Type*)$1)->type, vector<string>());
                                                        }
                                                       else{
-
-                                                          vector<string> args_t = ((Arguments*)$4)->types;
-                                                          vector<string> args_n = ((Arguments*)$4)->names;
+                                                          args_t = ((Arguments*)$4)->types;
+                                                          args_n = ((Arguments*)$4)->names;
 														  args_size = args_t.size();
                                                           symbols_tables.insertFuncEntry(func_name, ((Type*)$1)->type, args_t);
                                                           for(unsigned int i=0; i<args_size;i++){
                                                             string var_name = args_n[i];
                                                             if(symbols_tables.findSymbol(var_name)){
                                                                       errorDef(yylineno, var_name); exit(0);}
-                                                            symbols_tables.insertFuncArgEntry(args_n[i], args_t[i]);
                                                             define+="i32,";
                                                           }
                                                           define.pop_back();
@@ -105,6 +105,7 @@ FuncDecl1 : RetType ID LPAREN Formals RPAREN LBRACE {
                                                       buff.emit(alloc +"=alloca [50 x i32]");
                                                       for(unsigned int i=0; i<args_size;i++){//TODO:ASK SHIMON
                                                         string arg_ptr = buff.genRegister();
+                                                        symbols_tables.insertFuncArgEntry(args_n[i], args_t[i],arg_ptr);
                                                         buff.emit(arg_ptr+"= alloca i32");
                                                         buff.emit("store i32 %"+to_string(i)+" , i32* "+arg_ptr);
                                                       }
@@ -535,7 +536,19 @@ Exp :  Exp MULT_DIV Exp {
 
 
 
-	| Call {$$=$1;}
+	| Call {$$=$1;
+	        string ret_type = ((Type*)$1)->type;
+	        if(ret_type == "BOOL"){
+	            string reg = buff.genRegister();
+	            buff.emit(reg + " = icmp eq i32 " + $1->reg + ", 1");
+	            int quad = buff.emit("br i1 " + reg + ", label @, label @");
+	            ((Type*)$$)->true_list = buff.makelist({quad, FIRST});
+	            ((Type*)$$)->false_list = buff.makelist({quad, SECOND});
+	        }
+
+
+
+	 ;}
 
 	| STRING {
 	        $$ =$1;

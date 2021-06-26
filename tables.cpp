@@ -18,7 +18,7 @@ public:
     string loc;
 
     Entry(){}
-    Entry(string _name,string _type,int _offset, string loc="") : name(_name), type(_type), offset(_offset), args_types(vector<string>()),  is_func(false), loc(loc){} //for varible
+    Entry(string _name,string _type,int _offset, string loc) : name(_name), type(_type), offset(_offset), args_types(vector<string>()),  is_func(false), loc(loc){} //for varible
 
     Entry(string _name,string _type, vector<string> args): name(_name), type(_type), offset(0), args_types(args), is_func(true), loc(""){} //for func
     Entry& operator=(const Entry& e){
@@ -74,8 +74,8 @@ public:
 
     }
 
-    void insertFuncArgEntry( string name, string type){
-        tables[tables.size()-1].push_back(Entry(name, type, curr_func_offset--));
+    void insertFuncArgEntry( string name, string type, string loc ){
+        tables[tables.size()-1].push_back(Entry(name, type, curr_func_offset--,loc));
     }
 
     void insertFuncEntry(string name, string type, vector<string> args){
